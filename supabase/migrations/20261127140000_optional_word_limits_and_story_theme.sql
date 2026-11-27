@@ -56,3 +56,24 @@ begin
   execute v_def;
 end
 $$;
+
+-- Only the story owner may change a chapter's configured word limit.
+create or replace function private.guard_chapter_word_limit_owner()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public, private
+as $$
+begin
+  if new.target_words is distinct from old.target_words
+     and not private.is_story_owner(old.story_id) then
+    raise exception 'Bölüm kelime sınırını yalnızca hikâye yöneticisi değiştirebilir.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists guard_chapter_word_limit_owner on public.chapters;
+create trigger guard_chapter_word_limit_owner
+before update of target_words on public.chapters
+for each row execute function private.guard_chapter_word_limit_owner();

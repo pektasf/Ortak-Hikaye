@@ -22,6 +22,7 @@ export default function App() {
   const [activeChapterId, setActiveChapterId] = useState('');
   const [editorTitle, setEditorTitle] = useState('');
   const [editorContent, setEditorContent] = useState('');
+  const [editorBlocks, setEditorBlocks] = useState([]);
   const [editorStatus, setEditorStatus] = useState('draft');
   const [editorDirty, setEditorDirty] = useState(false);
   const [newStoryTitle, setNewStoryTitle] = useState('');
@@ -310,14 +311,19 @@ export default function App() {
     event.preventDefault();
     if (!activeChapter || !editorTitle.trim()) return;
     setBusy(true);
-    const { data, error } = await supabase.from('chapters').update({
-      title: editorTitle.trim(), content: editorContent, status: editorStatus
-    }).eq('id', activeChapter.id).select().single();
+    const { error } = await supabase.rpc('save_chapter_blocks', {
+      p_chapter_id: activeChapter.id, p_title: editorTitle.trim(), p_status: editorStatus,
+      p_blocks: editorBlocks.map(block => ({ id: block.id || null, content: block.content }))
+    });
+    const { data } = error ? { data: null } : await supabase.from('chapters').select('*').eq('id', activeChapter.id).single();
     if (error) setNotice('Bölüm kaydedilemedi: ' + error.message);
     else {
       setChapters(items => items.map(item => item.id === data.id ? data : item));
+      const { data: savedBlocks } = await supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', activeChapter.id).order('position');
+      setEditorBlocks(savedBlocks || []);
+      setEditorContent((savedBlocks || []).map(block => block.content).join('\\n\\n'));
       setEditorDirty(false);
-      setNotice('Bölüm kaydedildi. Önceki sürüm geçmişte saklandı.');
+      setNotice('Bölüm kaydedildi. Paragraf katkıları yazarlarla eşleştirildi.');
     }
     setBusy(false);
   }
@@ -327,7 +333,10 @@ export default function App() {
     setFocusMode(false);
     setActiveChapterId(chapter.id);
     setEditorTitle(chapter.title);
-    setEditorContent(chapter.content || '');
+    const { data: blocks, error: blocksError } = await supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', chapter.id).order('position');
+    if (blocksError) { setNotice('Paragraf katkıları yüklenemedi: ' + blocksError.message); return; }
+    setEditorBlocks(blocks || []);
+    setEditorContent((blocks || []).map(block => block.content).join('\\n\\n') || chapter.content || '');
     setEditorStatus(chapter.status || 'draft');
     setEditorDirty(false);
     setShowRevisions(false);
@@ -362,14 +371,19 @@ export default function App() {
   async function restoreRevision(revision) {
     if (!activeChapter || !window.confirm('Bu eski sürümü bölümün güncel içeriği olarak geri yüklemek istiyor musun?')) return;
     setBusy(true);
-    const { data, error } = await supabase.from('chapters').update({
-      title: revision.title, content: revision.content
-    }).eq('id', activeChapter.id).select().single();
+    const restoredBlocks = revision.content.split(/\\n\\s*\\n/).filter(text => text.trim()).map(content => ({id:null,content}));
+    const { error } = await supabase.rpc('save_chapter_blocks', {
+      p_chapter_id: activeChapter.id, p_title: revision.title, p_status: activeChapter.status,
+      p_blocks: restoredBlocks
+    });
+    const { data } = error ? { data: null } : await supabase.from('chapters').select('*').eq('id', activeChapter.id).single();
     if (error) setNotice('Sürüm geri yüklenemedi: ' + error.message);
     else {
       setChapters(items => items.map(item => item.id === data.id ? data : item));
       setEditorTitle(data.title);
       setEditorContent(data.content);
+      const { data: restored } = await supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', activeChapter.id).order('position');
+      setEditorBlocks(restored || []);
       setEditorStatus(data.status);
       setEditorDirty(false);
       setNotice('Önceki sürüm geri yüklendi.');
@@ -524,7 +538,18 @@ export default function App() {
                     {focusMode && <div className="focus-width-controls"><span>YAZMA ALANI</span><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Geniş · Word</button><span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime</span></div>}
                     <input className="chapter-title-input" required maxLength={120} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı"/>
                     <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} kelime</span><label>Durum <select value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label></div>
-                    <textarea className="chapter-content-input" value={editorContent} onChange={e => {setEditorContent(e.target.value);setEditorDirty(true);}} placeholder="Hikâyenin ilk cümlesini buraya yaz..." aria-label="Bölüm metni"/>
+                    <div className="chapter-blocks-editor" aria-label="Paragraf yazma alanı">
+                      {editorBlocks.map((block, index) => <div className="chapter-block" key={block.id || 'new-' + index}>
+                        <textarea className="chapter-content-input chapter-block-input" value={block.content} onChange={e => {
+                          const next = editorBlocks.map((item, i) => i === index ? {...item,content:e.target.value} : item);
+                          setEditorBlocks(next); setEditorContent(next.map(item => item.content).join('\\n\\n')); setEditorDirty(true);
+                        }} placeholder="Paragrafını buraya yaz…" aria-label={'Paragraf ' + (index + 1)}/>
+                        <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id === userId ? 'Senin paragrafın' : 'Katkı yapan yazar') : 'Eski metin · Yazarı henüz belirlenmemiş'} · {words(block.content)} kelime</span>
+                          <button type="button" className="text-button danger" onClick={() => {const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item => item.content).join('\\n\\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
+                        </div>
+                      </div>)}
+                      <button type="button" className="add-paragraph-button" onClick={() => {setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yeni paragraf ekle</button>
+                    </div>
                     <div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Değişiklikleri kaydet'}</button></div>
                     {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>
                       {revisions.length ? revisions.map(revision => <article key={revision.id}><div><strong>{revision.title}</strong><small>{new Date(revision.created_at).toLocaleString('tr-TR')} · {words(revision.content)} kelime</small></div><button type="button" className="button light" onClick={() => restoreRevision(revision)}>Geri yükle</button></article>) : <p>Henüz önceki bir sürüm yok.</p>}

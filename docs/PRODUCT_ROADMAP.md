@@ -93,3 +93,12 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [ ] Gerçek paragraf/metin bloğu bazlı yazarlık ve kelime katkısı
 - [ ] Cümle vurguları ve yazarın cümlelerinin kaç kez vurgulandığı
 - [ ] Profil görseli yükleme ve diğer yazarların profil sayfalarına geçiş
+
+
+## Aşama 6 — Paragraf bazlı yazarlık ve katkı
+- [x] Bölüm metnini paragraf bloklarına ayıran veri modeli
+- [x] Yeni paragrafın ilk yazarını ve son düzenleyeni ayrı kaydetme
+- [x] Eski bölüm metinlerini yazarı bilinmeyen arşiv blokları olarak koruma
+- [ ] Paragraf katkı geçmişini ve kelime istatistiklerini profil sayfasında gösterme
+- [ ] Paragraf silme/geri alma geçmişini görünür kılma
+- [ ] Eşzamanlı düzenlemede çakışma kontrolü

@@ -5,6 +5,8 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 ## Kesinleşen ürün kararları
 
 - Tek bir kitap altında birden fazla hikâye oluşturulabilir.
+- Her davetli yazar kendi hikâyesini oluşturabilir ve yalnızca kendi hikâyesine katılmaları için davet bağlantısı üretebilir.
+- Hikâye daveti, kişiye genel kitap yöneticiliği vermez; erişim ilgili hikâyeyle sınırlıdır.
 - Her hikâye kendi içinde bölümlere ayrılabilir.
 - Yönetici ihtiyaç oldukça hikâye veya bölüm oluşturabilir; sıralayabilir, yeniden adlandırabilir, taslağa alabilir ve yayımlayabilir.
 - Okuyucu iki okuma biçiminden birini seçebilir: sayfa sayfa kitap görünümü veya kesintisiz kaydırma.
@@ -26,9 +28,11 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 
 Amaç: Mevcut tek metin akışını, esnek kitap / hikâye / bölüm yapısına dönüştürmek.
 
+- [x] İlk ek şema: hikâyeler, bölümler, hikâye üyeleri ve hikâyeye özel davetler (migration hazır; Supabase'te uygulanması bekleniyor)
 - [ ] Veritabanı şeması: kitaplar, hikâyeler, bölümler, sıralama, durum (taslak/yayında), oluşturma ve güncelleme zamanları
 - [ ] İçerik bloklarının bölüm ve hikâyeyle ilişkilendirilmesi
 - [ ] Her paragraf/cümle için kalıcı kimlik ve yazar sahipliği; düzenleme geçmişi
+- [x] Her yazar için hikâye oluşturma ve kendi hikâyesine özel davet bağlantısı üretme arayüzü (migration uygulandıktan sonra kullanılabilir)
 - [ ] Yönetici için hikâye ve bölüm oluşturma, düzenleme, sıralama, yayımlama ve arşivleme
 - [ ] Eski story_entries verisini kaybetmeden yeni yapıya geçiş ve doğrulama
 - [ ] RLS: yalnızca yetkili roller yönetim işlemi yapabilir; davetsiz kullanıcı içerikleri göremez
@@ -85,4 +89,7 @@ Amaç: Mevcut tek metin akışını, esnek kitap / hikâye / bölüm yapısına 
 
 ## Şu anki öncelik
 
-Önce Aşama 0'daki yönetici ayarlarının canlı testi tamamlanacak. Ardından Aşama 1 için mevcut veritabanı ve yazma akışı incelenerek geriye uyumlu içerik modeli tasarlanacak. Okuma ekranı ve etkileşimler, bu modelin üzerine kurulacak.
+1. `supabase/migrations/20261127_author_owned_stories.sql` dosyasını Supabase SQL Editor'de çalıştırıp hikâye tablolarını ve hikâyeye özel davet RPC'lerini etkinleştir.
+2. Yazar hikâyesi oluşturma ve davetle katılma akışını iki farklı hesapla test et.
+3. Sonra hikâye/bölüm içerik editörü ve yazarların ortak yazma akışını mevcut genel yazma sırasından bağımsızlaştır.
+4. Okuma ekranı ve etkileşimleri bu içerik modelinin üzerine kur.

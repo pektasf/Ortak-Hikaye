@@ -975,3 +975,52 @@ input,textarea,select{font-size:13px}
 .writer-rich-canvas .writer-protected-block{cursor:not-allowed;user-select:text;opacity:.92;}
 .writer-rich-canvas .writer-new-block{min-height:2em;outline:none;}
 .writer-rich-canvas .writer-new-block:empty::before{content:attr(data-placeholder);color:var(--muted,#999);pointer-events:none;}
+
+
+/* UX foundation: bounded story preview and predictable settings controls. */
+.story-settings-form{
+  padding:clamp(14px,2vw,20px);
+  border:1px solid #e8dfd3;
+  border-radius:12px;
+  background:linear-gradient(145deg,#fffdf9 0%,#f8f4ed 100%);
+  box-shadow:0 5px 18px rgba(63,44,29,.035);
+}
+.story-settings-grid textarea{
+  box-sizing:border-box;
+  height:88px;
+  min-height:88px;
+  max-height:88px;
+  resize:none;
+  overflow-y:auto;
+  overflow-x:hidden;
+  line-height:1.55;
+  overflow-wrap:anywhere;
+}
+.story-theme-callout{
+  width:min(100%,720px);
+  max-height:190px;
+  overflow:hidden;
+  border-radius:0 8px 8px 0;
+}
+.story-theme-callout p{
+  max-height:112px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding-right:8px;
+  overscroll-behavior:contain;
+  overflow-wrap:anywhere;
+  scrollbar-width:thin;
+}
+.story-settings-footer{
+  padding-top:2px;
+}
+.story-settings-footer .button{
+  min-height:40px;
+}
+@media(max-width:680px){
+  .story-settings-form{padding:13px;border-radius:10px}
+  .story-settings-grid{gap:10px}
+  .story-settings-grid textarea{height:104px;min-height:104px;max-height:104px}
+  .story-theme-callout{max-height:170px}
+  .story-theme-callout p{max-height:96px}
+}

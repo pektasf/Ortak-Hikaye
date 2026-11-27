@@ -1116,18 +1116,7 @@ export default function App() {
                         onKeyUp={captureSentenceSelection}
                       >
                         {editorBlocks.map((block,index)=><p key={block.id || 'legacy-'+index} data-block-id={block.id || ''}>{block.content ? renderHighlightedText(block.content, block.id, sentenceHighlights) : <br/>}</p>)}
-                      </div> : <>
-                        {editorBlocks.map((block,index)=><div className="chapter-block" key={block.id || 'new-'+index}>
-                          <textarea className="chapter-content-input chapter-block-input" disabled={!writingLock?.acquired} rows={Math.max(3,block.content.split('\n').length)} value={block.content} onChange={e=>{
-                            const next=editorBlocks.map((item,i)=>i===index?{...item,content:e.target.value}:item);
-                            setEditorBlocks(next);setEditorContent(next.map(item=>item.content).join('\n\n'));setEditorDirty(true);
-                          }} placeholder="Paragrafını buraya yaz…" aria-label={'Paragraf '+(index+1)}/>
-                          <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id===userId?'İlk yazar: Sen':'İlk yazar: '+block.author_name) : 'Eski metin · İlk yazarı bilinmiyor'}{block.updated_by && block.updated_by!==block.author_id?' · Son düzenleyen: '+(block.updated_by===userId?'Sen':block.editor_name):''} · {words(block.content)} kelime</span>
-                            <button type="button" className="text-button danger" disabled={!writingLock?.acquired} onClick={()=>{const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item=>item.content).join('\n\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
-                          </div>
-                        </div>)}
-                        <button type="button" className="add-paragraph-button" disabled={!writingLock?.acquired} onClick={()=>{setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yeni paragraf ekle</button>
-                      </>}
+                      </div>}
                     </div>
                     <p className="editor-save-help">Otomatik taslak yalnızca senin için saklanır. Diğer yazarların da Kitabı oku alanında görebilmesi için <strong>Kaydet ve okumada göster</strong> düğmesine bas. Taslak durumundaki metin yalnızca hikâye üyelerine görünür.</p><div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || chapterOverLimit || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Kaydet ve okumada göster'}</button></div>
                     {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>

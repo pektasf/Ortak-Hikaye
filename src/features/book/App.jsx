@@ -27,6 +27,30 @@ function renderHighlightedText(content, blockId, highlights) {
   return nodes;
 }
 
+function readWriterCanvasBlocks(root, userId) {
+  if (!root) return [];
+  const nodes = Array.from(root.childNodes || []);
+  const blocks = [];
+  for (const node of nodes) {
+    const content = node.nodeType === 3
+      ? node.textContent
+      : (node.innerText || node.textContent || '');
+    const normalized = String(content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').trimEnd();
+    if (!normalized.trim()) continue;
+    const id = node.nodeType === 1 ? node.getAttribute('data-block-id') : null;
+    blocks.push({ id: id || null, content: normalized, author_id: userId });
+  }
+  if (!blocks.length) {
+    const fallback = String(root.innerText || root.textContent || '')
+      .replace(/\r/g, '').replace(/\u00a0/g, ' ').trim();
+    if (fallback) {
+      fallback.split(/\n\s*\n/).filter(Boolean)
+        .forEach(content => blocks.push({ id: null, content: content.trimEnd(), author_id: userId }));
+    }
+  }
+  return blocks;
+}
+
 function measureBookPages(value, element) {
  const paragraphs=String(value||'').split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);
  if(!paragraphs.length||!element||!element.clientWidth||!element.clientHeight)return [];
@@ -645,15 +669,24 @@ export default function App() {
     let blocksToSave = editorBlocks.map(block => ({ id: block.id || null, content: block.content }));
     if (richCanvas) {
       const usedIds = new Set();
-      blocksToSave = Array.from(richCanvas.children).map(node => {
-        const rawId = node.getAttribute('data-block-id');
-        const id = rawId && !usedIds.has(rawId) ? rawId : null;
+      blocksToSave = readWriterCanvasBlocks(richCanvas, userId).map(block => {
+        const id = block.id && !usedIds.has(block.id) ? block.id : null;
         if (id) usedIds.add(id);
-        return {
-          id,
-          content: String(node.innerText || node.textContent || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').trimEnd()
-        };
-      }).filter(block => block.content.trim());
+        return { id, content: block.content };
+      });
+    }
+    if (!blocksToSave.length && editorContent.trim()) {
+      blocksToSave = editorContent.split(/\n\s*\n/).filter(text => text.trim())
+        .map(content => ({ id: null, content: content.trimEnd() }));
+    }
+    if (!blocksToSave.length && editorBlocks.length) {
+      blocksToSave = editorBlocks.filter(block => String(block.content || '').trim())
+        .map(block => ({ id: block.id || null, content: block.content }));
+    }
+    if (!blocksToSave.length) {
+      setNotice('Metin alanı boş görünüyor. Yazdığın metni kontrol et; boş içerik kaydedilmedi.');
+      setBusy(false);
+      return;
     }
     const { error } = await supabase.rpc('save_chapter_blocks', {
       p_chapter_id: activeChapter.id, p_title: editorTitle.trim(), p_status: editorStatus,
@@ -986,7 +1019,7 @@ export default function App() {
                         aria-multiline="true"
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
                         style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'Literata', 'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
-                        onInput={e=>{const nodes=Array.from(e.currentTarget.children).map(node=>({id:node.getAttribute('data-block-id')||null,content:String(node.innerText||node.textContent||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trimEnd(),author_id:userId})).filter(block=>block.content.trim());setEditorBlocks(nodes);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
+                        onInput={e=>{const nodes=readWriterCanvasBlocks(e.currentTarget,userId);setEditorBlocks(nodes);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
                         onMouseUp={captureSentenceSelection}
                         onKeyUp={captureSentenceSelection}
                       >

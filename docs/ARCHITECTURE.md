@@ -32,4 +32,4 @@ Vercel / Netlify          Ücretsiz statik frontend yayını
 Tarayıcıdaki görünürlük kontrolleri yetkilendirme değildir. Davetli kayıt, profil rolü, katkı ekleme, oy ve kilit işlemleri veritabanı RLS/RPC ile doğrulanmalıdır. `service_role` anahtarı istemciye konmaz.
 
 ## İlk kaynak
-İlk HTML tabanlı Claude Artifact kaynağı `docs/legacy/Ortak-Roman-Claude-Artifact.html` altında korunur.
+İlk HTML tabanlı Claude Artifact kaynağı çalışma alanında ayrı tutuluyor. GitHub deposuna legacy dosya aktarımı henüz tamamlanmadı; hedef konum `docs/legacy/Ortak-Roman-Claude-Artifact.html`.

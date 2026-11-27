@@ -570,3 +570,69 @@ html.dark .story-nav-item.active { background: #30252a; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Writing studio refinement: restrained history controls and compact manuscript metrics. */
+.writer-history-button{
+  width:30px;height:30px;display:inline-grid;place-items:center;flex:none;
+  border:1px solid #ddd1c3;border-radius:50%;background:#f8f4ed;color:#765b4a;
+  font:18px/1 'Crimson Pro',serif;cursor:pointer;transition:background .16s,border-color .16s,transform .16s;
+}
+.writer-history-button:hover{background:#eee4d8;border-color:#c9b39d;transform:translateY(-1px)}
+.writer-history-button:focus-visible,.writer-back-button:focus-visible,.writer-exit-button:focus-visible,
+.writer-layout-group button:focus-visible,.writer-format-group select:focus-visible{
+  outline:2px solid var(--editorial-terracotta);outline-offset:3px;
+}
+.focus-mode .focus-word-count{font-variant-numeric:tabular-nums;letter-spacing:.015em}
+.focus-mode .save-state{color:#82715f}
+.focus-mode .writer-paste-note{color:#8a725c}
+.focus-mode .writer-rich-canvas>p:focus{outline:none}
+.focus-mode .writer-rich-canvas ::selection{background:rgba(192,97,58,.2)}
+@media(max-width:680px){
+  .focus-mode .chapter-editor{
+    grid-template-rows:auto auto auto auto minmax(0,1fr) auto auto!important;
+    gap:7px!important;padding:10px 10px 12px!important;
+  }
+  .focus-mode .editor-toolbar{
+    align-items:flex-start!important;flex-direction:column!important;gap:7px!important;
+    padding-bottom:8px!important;
+  }
+  .focus-mode .writer-studio-brand strong{max-width:78vw;font-size:16px}
+  .focus-mode .writer-toolbar-actions{
+    width:100%;min-width:0;justify-content:space-between!important;gap:7px!important;
+  }
+  .focus-mode .writer-toolbar-actions .save-state{
+    min-width:0;max-width:58%;white-space:normal;font-size:9px;line-height:1.35;
+  }
+  .focus-mode .writer-exit-button{padding:7px 10px;font-size:9px}
+  .focus-mode .focus-width-controls{
+    display:grid!important;grid-template-columns:minmax(0,1fr);gap:7px!important;
+    align-items:start!important;padding:0!important;
+  }
+  .focus-mode .writer-format-group{
+    width:100%;min-width:0;flex-wrap:nowrap!important;overflow-x:auto;
+    padding:1px 1px 4px;scrollbar-width:none;
+  }
+  .focus-mode .writer-format-group::-webkit-scrollbar{display:none}
+  .focus-mode .writer-format-group label{flex:none;font-size:7px;gap:4px}
+  .focus-mode .writer-format-group select{height:29px;padding:0 6px;font-size:9px}
+  .focus-mode .writer-layout-group{width:100%;justify-content:flex-start;gap:6px}
+  .focus-mode .writer-layout-group button{padding:6px 10px;font-size:9px}
+  .focus-mode .sentence-highlight-actions{width:100%;justify-content:flex-start;gap:6px}
+  .focus-mode .sentence-highlight-actions>span{font-size:8px}
+  .focus-mode .writer-history-button{width:28px;height:28px}
+  .focus-mode .focus-word-count{font-size:9px;white-space:normal}
+  .focus-mode .chapter-title-input{min-height:39px!important;font-size:25px!important}
+  .focus-mode .editor-meta{font-size:9px!important;gap:6px}
+  .focus-mode .chapter-blocks-editor{padding:17px 15px!important}
+  .focus-mode .chapter-block-input{font-size:18px!important;line-height:1.8!important}
+  .focus-mode .editor-save-help{font-size:10px;line-height:1.45;padding:7px 9px;margin:0}
+  .focus-mode .writer-paste-note{display:none}
+  .focus-mode .editor-footer{display:grid;grid-template-columns:1fr 1.5fr;gap:7px;padding-top:7px!important}
+  .focus-mode .editor-footer .button{width:100%;min-width:0;padding:10px 7px;font-size:10px}
+}
+@media(max-height:700px) and (min-width:681px){
+  .focus-mode .chapter-editor{gap:6px!important;padding-top:9px!important;padding-bottom:9px!important}
+  .focus-mode .chapter-blocks-editor{padding-top:22px!important;padding-bottom:22px!important}
+  .focus-mode .editor-save-help{margin:0;padding:7px 10px;font-size:10px;line-height:1.4}
+  .focus-mode .editor-footer{padding:7px 0!important}
+}

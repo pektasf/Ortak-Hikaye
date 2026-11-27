@@ -265,18 +265,41 @@ export default function App() {
     <header className="topbar"><a className="brand" href={window.location.pathname}>✦ ORTAK <b>ROMAN</b></a>
       {session ? <div className="account"><span>{session.user.email}</span><button className="button light" onClick={async () => { await release(); await supabase.auth.signOut(); }}>Çıkış</button></div> : <span className="eyebrow">DAVETLİ YAZARLAR</span>}
     </header>
-    <main className="content">
-      <section className="hero">
-        <div><span className="eyebrow">BİRLİKTE YAZILAN BİR HİKÂYE</span>
-          <h1>{book?.title || 'Ortak Roman'}</h1><p>{book?.subtitle || 'Bir hikâye, birçok ses'}</p>{book?.note && <p className="book-note">{book.note}</p>}</div>
-        <div className="word-count"><strong>{total.toLocaleString('tr-TR')}</strong><span> / {target.toLocaleString('tr-TR')} kelime</span></div>
-      </section>
-      <div className="progress"><i style={{ width: Math.min(100, total / target * 100) + '%' }} /></div>
-      {!session ? <section className="panel">
-        <span className="eyebrow">KİTABA KATIL</span><h2>Davet bağlantısıyla giriş yap</h2>
-        <p>Bu roman yalnızca geçerli davet bağlantısına sahip kişilere açıktır. Davet bağlantısını açtıktan sonra e-posta adresine giriş bağlantısı gönder.</p>
-        <form onSubmit={signIn} className="login-form"><input type="email" required placeholder="E-posta adresin" value={email} onChange={e => setEmail(e.target.value)} /><button className="button" disabled={busy}>Giriş bağlantısı gönder</button></form>
-      </section> : <>
+    <main className={session ? "content" : "content login-content"}>
+      {!session ? <div className="login-layout">
+        <section className="login-hero">
+          <div className="login-hero-copy">
+            <span className="eyebrow">BİRLİKTE YAZILAN BİR HİKÂYE</span>
+            <h1>Her hikâye<br/><em>bir sesle</em> başlar.</h1>
+            <p>Farklı zihinler, tek bir sayfada buluşur. Sen de davet edildiğin hikâyeye katıl; bir sonraki cümleyi birlikte yazalım.</p>
+            <div className="login-signature"><span>✳</span> Bir hikâye, birçok ses</div>
+          </div>
+          <div className="book-art" aria-hidden="true">
+            <div className="book-art-glow"></div><div className="book-sheet sheet-back"></div>
+            <div className="book-sheet sheet-front"><span>ORTAK ROMAN</span><i>“</i><strong>Bir hikâye,<br/>birçok ses.</strong><small>İLK SAYFA HENÜZ YAZILMADI</small></div>
+            <span className="art-spark spark-one">✳</span><span className="art-spark spark-two">✦</span>
+          </div>
+        </section>
+        <section className="panel login-panel">
+          <div className="login-panel-mark">✦</div><span className="eyebrow">DAVETLİ YAZARLAR İÇİN</span>
+          <h2>Hikâyeye katıl.</h2>
+          <p>Davet bağlantınla geldin. E-posta adresini bırak; sana güvenli bir giriş bağlantısı gönderelim.</p>
+          <form onSubmit={signIn} className="login-form">
+            <label htmlFor="login-email">E-POSTA ADRESİN</label>
+            <input id="login-email" type="email" required placeholder="ornek@eposta.com" value={email} onChange={e => setEmail(e.target.value)} />
+            <button className="button" disabled={busy}>{busy ? 'Gönderiliyor…' : 'Giriş bağlantısı gönder'} <span>→</span></button>
+          </form>
+          <div className="login-footnote"><span>◈</span> Yalnızca davet bağlantısı olan kişiler katılabilir.</div>
+        </section>
+      </div> : <>
+        <section className="hero">
+          <div><span className="eyebrow">BİRLİKTE YAZILAN BİR HİKÂYE</span>
+            <h1>{book?.title || 'Ortak Roman'}</h1><p>{book?.subtitle || 'Bir hikâye, birçok ses'}</p>{book?.note && <p className="book-note">{book.note}</p>}</div>
+          <div className="word-count"><strong>{total.toLocaleString('tr-TR')}</strong><span> / {target.toLocaleString('tr-TR')} kelime</span></div>
+        </section>
+        <div className="progress"><i style={{ width: Math.min(100, total / target * 100) + '%' }} /></div>
+      </>}
+      {session ? <>
         {role === 'owner' && <section className="panel invite-panel">
           <span className="eyebrow">YÖNETİCİ · DAVETLER</span><h2>Yeni yazar davet et</h2>
           <p>Bağlantı 7 gün geçerlidir ve süresi dolana kadar sınırsız sayıda yeni hesap tarafından kullanılabilir.</p>

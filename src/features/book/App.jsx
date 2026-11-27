@@ -5,6 +5,7 @@ import SetupScreen from '../../components/setup/SetupScreen.jsx';
 import '../../styles/global.css';
 import '../../styles/editorial-design.css';
 import '../../styles/reader-pagination.css';
+import { findReaderAuthorBlock, getReaderParagraphCredits } from './reader-attribution.js';
 
 function renderHighlightedText(content, blockId, highlights) {
   const text = String(content || '');
@@ -49,113 +50,18 @@ function renderReaderHighlightedText(content, highlights) {
   return nodes;
 }
 
-function normalizeAttributionText(value) {
-  return String(value || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+function renderReaderParagraph(content, blocks, highlights, key) {
+  const credits = getReaderParagraphCredits(content, blocks);
+  return (
+    <div className="reader-paragraph-group" key={key}>
+      <p className="reader-attributed-text">{renderReaderHighlightedText(content, highlights)}</p>
+      {credits && <div className="reader-paragraph-credits" aria-label="Paragraf katkı bilgisi">
+        {credits.authorName && <span className="reader-paragraph-credit"><small>YAZAR</small><strong title={credits.authorName}>{credits.authorName}</strong></span>}
+        {credits.editorName && <span className="reader-paragraph-credit"><small>SON DÜZENLEYEN</small><strong title={credits.editorName}>{credits.editorName}</strong></span>}
+      </div>}
+    </div>
+  );
 }
-
-function buildRevisionAttribution(revisions, targetContent, names) {
-  const tokenize = value => normalizeAttributionText(value).match(/\\s+|[^\\s]+/g) || [];
-  let previousTokens = [];
-  let tokenAuthors = [];
-  let lastEditor = null;
-  const ordered = [...(revisions || [])].sort((a,b) => new Date(a.created_at)-new Date(b.created_at));
-
-  for (const revision of ordered) {
-    const nextTokens = tokenize(revision.content);
-    if (!nextTokens.length) continue;
-    const editor = revision.editor_id || lastEditor;
-    if (!previousTokens.length) {
-      previousTokens = nextTokens;
-      tokenAuthors = nextTokens.map(() => editor);
-      lastEditor = editor;
-      continue;
-    }
-
-    // LCS token diff preserves unchanged words even when a writer inserts text
-    // in the middle of an existing paragraph. Only genuinely new/replaced
-    // tokens are attributed to the editor of this revision.
-    const rows = previousTokens.length + 1;
-    const cols = nextTokens.length + 1;
-    const dp = Array.from({ length: rows }, () => new Uint16Array(cols));
-    for (let i = previousTokens.length - 1; i >= 0; i--) {
-      for (let j = nextTokens.length - 1; j >= 0; j--) {
-        dp[i][j] = previousTokens[i] === nextTokens[j]
-          ? dp[i + 1][j + 1] + 1
-          : Math.max(dp[i + 1][j], dp[i][j + 1]);
-      }
-    }
-    const nextAuthors = [];
-    let i = 0, j = 0;
-    while (j < nextTokens.length) {
-      if (i < previousTokens.length && previousTokens[i] === nextTokens[j]) {
-        nextAuthors.push(tokenAuthors[i]);
-        i++; j++;
-      } else if (i < previousTokens.length && dp[i + 1][j] >= dp[i][j + 1]) {
-        i++;
-      } else {
-        nextAuthors.push(editor);
-        j++;
-      }
-    }
-    previousTokens = nextTokens;
-    tokenAuthors = nextAuthors;
-    lastEditor = editor;
-  }
-
-  const targetTokens = tokenize(targetContent);
-  if (targetTokens.join('') !== previousTokens.join('')) {
-    // The displayed saved chapter differs from the latest revision snapshot.
-    // Do not guess who wrote the unmatched text.
-    const rows = previousTokens.length + 1;
-    const cols = targetTokens.length + 1;
-    const dp = Array.from({ length: rows }, () => new Uint16Array(cols));
-    for (let i = previousTokens.length - 1; i >= 0; i--) {
-      for (let j = targetTokens.length - 1; j >= 0; j--) {
-        dp[i][j] = previousTokens[i] === targetTokens[j]
-          ? dp[i + 1][j + 1] + 1
-          : Math.max(dp[i + 1][j], dp[i][j + 1]);
-      }
-    }
-    const nextAuthors = [];
-    let i = 0, j = 0;
-    while (j < targetTokens.length) {
-      if (i < previousTokens.length && previousTokens[i] === targetTokens[j]) {
-        nextAuthors.push(tokenAuthors[i]); i++; j++;
-      } else if (i < previousTokens.length && dp[i + 1][j] >= dp[i][j + 1]) {
-        i++;
-      } else {
-        nextAuthors.push(null); j++;
-      }
-    }
-    tokenAuthors = nextAuthors;
-  }
-
-  const text = targetTokens.join('');
-  const authors = [];
-  targetTokens.forEach((token, index) => {
-    for (let i = 0; i < token.length; i++) authors.push(tokenAuthors[index] || null);
-  });
-  return { text, authors, names: names || {} };
-}
-
-function renderAttributedReaderText(content, attribution, highlights) {
-  const normalized=normalizeAttributionText(content); if(!normalized) return content;
-  const start=attribution?.text ? attribution.text.indexOf(normalized) : -1;
-  if(start<0) return renderReaderHighlightedText(content,highlights);
-  const nodes=[]; let cursor=0;
-  while(cursor<normalized.length){const id=attribution.authors[start+cursor]||null;let end=cursor+1;while(end<normalized.length&&(attribution.authors[start+end]||null)===id)end++;const name=attribution.names[id]||'Yazar bilgisi bulunamadı';const part=normalized.slice(cursor,end);nodes.push(<span className="reader-author-hover" title={name+' yazdı'} key={cursor}>{renderReaderHighlightedText(part,highlights)}</span>);cursor=end;}
-  return nodes;
-}
-function findReaderAuthorBlock(paragraph, blocks) {
-  const normalize = value => String(value || '').replace(/\\r/g, '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
-  const target = normalize(paragraph);
-  if (!target) return null;
-  const candidates = (blocks || []).map(block => ({ block, text: normalize(block.content) })).filter(item => item.text);
-  return candidates.find(item => item.text === target)?.block
-    || candidates.find(item => item.text.includes(target) || target.includes(item.text))?.block
-    || null;
-}
-
 function readWriterCanvasBlocks(root, userId) {
   if (!root) return [];
   const nodes = Array.from(root.childNodes || []);
@@ -180,16 +86,28 @@ function readWriterCanvasBlocks(root, userId) {
   return blocks;
 }
 
-function measureBookPages(value, element) {
+function measureBookPages(value, element, authorBlocks = []) {
  const paragraphs=String(value||'').split(/\r?\n+/).map(x=>x.trim()).filter(Boolean);
  if(!paragraphs.length||!element||!element.clientWidth||!element.clientHeight)return [];
  const probe=element.cloneNode(false),rect=element.getBoundingClientRect();
  Object.assign(probe.style,{position:'fixed',left:'-10000px',top:'0',visibility:'hidden',display:'block',width:rect.width+'px',height:element.clientHeight+'px',overflow:'hidden',contain:'layout style paint',pointerEvents:'none'});
  document.body.appendChild(probe);
- const fits=text=>{const p=document.createElement('p');p.textContent=text;probe.appendChild(p);const ok=probe.scrollHeight<=probe.clientHeight+1;p.remove();return ok;};
+ const makeParagraph=text=>{
+  const group=document.createElement('div');group.className='reader-paragraph-group';
+  const p=document.createElement('p');p.className='reader-attributed-text';p.textContent=text;group.appendChild(p);
+  const credits=getReaderParagraphCredits(text,authorBlocks);
+  if(credits){
+   const meta=document.createElement('div');meta.className='reader-paragraph-credits';
+   if(credits.authorName){const item=document.createElement('span');item.className='reader-paragraph-credit';const label=document.createElement('small');label.textContent='YAZAR';const name=document.createElement('strong');name.textContent=credits.authorName;item.append(label,name);meta.appendChild(item);}
+   if(credits.editorName){const item=document.createElement('span');item.className='reader-paragraph-credit';const label=document.createElement('small');label.textContent='SON DÜZENLEYEN';const name=document.createElement('strong');name.textContent=credits.editorName;item.append(label,name);meta.appendChild(item);}
+   group.appendChild(meta);
+  }
+  return group;
+ };
+ const fits=text=>{const group=makeParagraph(text);probe.appendChild(group);const ok=probe.scrollHeight<=probe.clientHeight+1;group.remove();return ok;};
  const pages=[];let page=[];
  const flush=()=>{if(page.length)pages.push(page.join('\n\n'));page=[];};
- const append=text=>{const p=document.createElement('p');p.textContent=text;probe.appendChild(p);page.push(text);};
+ const append=text=>{probe.appendChild(makeParagraph(text));page.push(text);};
  for(const paragraph of paragraphs){
   if(fits(paragraph)){append(paragraph);continue;}
   let rest=paragraph.split(/\s+/);
@@ -204,7 +122,6 @@ function measureBookPages(value, element) {
  }
  flush();probe.remove();return pages;
 }
-
 export default function App() {
   const [session, setSession] = useState(null);
   const [authorized, setAuthorized] = useState(false);
@@ -233,7 +150,6 @@ export default function App() {
   const [editorBlocks, setEditorBlocks] = useState([]);
   const [sentenceHighlights, setSentenceHighlights] = useState([]);
   const [readerParagraphBlocks, setReaderParagraphBlocks] = useState([]);
-  const [readerAuthorAttribution, setReaderAuthorAttribution] = useState(null);
   const [readerSelectedSentence, setReaderSelectedSentence] = useState(null);
   const [selectedSentence, setSelectedSentence] = useState(null);
   const [editorStatus, setEditorStatus] = useState('draft');
@@ -293,10 +209,10 @@ export default function App() {
   // Unsaved edits stay private because only chapters.content (the last saved version) is rendered here.
   const readerChapters = chapters.filter(item => writingPresenceReady && String(item.content || '').trim().length > 0);
   const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
-  const readerParagraphs = readerParagraphBlocks.length ? readerParagraphBlocks : String(readerChapter?.content || '').split(/\r?\n+/).map(content => ({ id: null, content: content.trim(), author_name: 'Yazar bilgisi bulunamadı' })).filter(item => item.content);
+  const readerParagraphs = readerParagraphBlocks.length ? readerParagraphBlocks : String(readerChapter?.content || '').split(/\r?\n+/).map(content => ({ id: null, content: content.trim() })).filter(item => item.content);
   const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
   const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;
-  useEffect(()=>{if(view!=='reader'||effectiveReaderLayout==='scroll')return;setReaderPages([]);let frame=0;const measure=()=>{window.cancelAnimationFrame(frame);frame=window.requestAnimationFrame(()=>setReaderPages(measureBookPages(readerChapter?.content||'',readerPageMeasureRef.current)));};measure();const el=readerPageMeasureRef.current;const observer=typeof ResizeObserver!=='undefined'&&el?new ResizeObserver(measure):null;if(observer&&el)observer.observe(el);window.addEventListener('resize',measure,{passive:true});document.fonts?.ready?.then(measure);return()=>{window.cancelAnimationFrame(frame);observer?.disconnect();window.removeEventListener('resize',measure);};},[view,readerChapter?.id,readerChapter?.content,effectiveReaderLayout]);
+  useEffect(()=>{if(view!=='reader'||effectiveReaderLayout==='scroll')return;setReaderPages([]);let frame=0;const measure=()=>{window.cancelAnimationFrame(frame);frame=window.requestAnimationFrame(()=>setReaderPages(measureBookPages(readerChapter?.content||'',readerPageMeasureRef.current,readerParagraphBlocks)));};measure();const el=readerPageMeasureRef.current;const observer=typeof ResizeObserver!=='undefined'&&el?new ResizeObserver(measure):null;if(observer&&el)observer.observe(el);window.addEventListener('resize',measure,{passive:true});document.fonts?.ready?.then(measure);return()=>{window.cancelAnimationFrame(frame);observer?.disconnect();window.removeEventListener('resize',measure);};},[view,readerChapter?.id,readerChapter?.content,effectiveReaderLayout,readerParagraphBlocks]);
   const readerMaxPageIndex = effectiveReaderLayout === 'spread'
     ? Math.max(0, Math.ceil(readerPages.length / 2) * 2 - 2)
     : Math.max(0, readerPages.length - 1);
@@ -399,28 +315,19 @@ export default function App() {
     if (view !== 'reader' || !readerChapter?.id) return;
     let alive = true;
     setReaderParagraphBlocks([]);
-    setReaderAuthorAttribution(null);
-    Promise.all([
-      supabase.from('chapter_revisions').select('id,content,editor_id,created_at').eq('chapter_id', readerChapter.id).order('created_at', { ascending: true }),
-      supabase.from('chapter_blocks').select('id,content,author_id,position').eq('chapter_id', readerChapter.id).order('position')
-    ]).then(async ([{ data: revisionRows, error: revisionsError }, { data: blocks, error: blocksError }]) => {
-      if (!alive) return;
-      if (revisionsError || blocksError) {
-        setNotice('Yazar geçmişi yüklenemedi: ' + (revisionsError || blocksError).message);
-        return;
-      }
-      const { data: authors, error: authorsError } = await supabase.rpc('get_story_author_names', { p_chapter_id: readerChapter.id });
-      if (!alive) return;
-      if (authorsError) {
-        setNotice('Yazar adları yüklenemedi: ' + authorsError.message);
-        return;
-      }
-      const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name || 'Yazar']));
-      setReaderAuthorAttribution(buildRevisionAttribution(revisionRows || [], readerChapter.content || '', names));
-      setReaderParagraphBlocks(String(readerChapter.content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').split(/\n+/)
-        .map(content => ({ id: null, content: content.trim(), author_name: 'Revizyon geçmişinden eşleştiriliyor' }))
-        .filter(item => item.content));
-    });
+    supabase.from('chapter_blocks')
+      .select('id,content,author_id,updated_by,position')
+      .eq('chapter_id', readerChapter.id)
+      .order('position')
+      .then(async ({ data: blocks, error: blocksError }) => {
+        if (!alive) return;
+        if (blocksError) { setNotice('Paragraf yazarları yüklenemedi: ' + blocksError.message); return; }
+        const { data: authors, error: authorsError } = await supabase.rpc('get_story_author_names', { p_chapter_id: readerChapter.id });
+        if (!alive) return;
+        if (authorsError) { setNotice('Yazar adları yüklenemedi: ' + authorsError.message); return; }
+        const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name || 'Yazar']));
+        setReaderParagraphBlocks((blocks || []).map(block => ({ ...block, author_name: names[block.author_id] || null, editor_name: names[block.updated_by] || null })));
+      });
     supabase.from('chapter_sentence_highlights')
       .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
       .eq('chapter_id', readerChapter.id)
@@ -431,7 +338,7 @@ export default function App() {
         else setSentenceHighlights(data || []);
       });
     return () => { alive = false; };
-  }, [view, readerChapter?.id, readerChapter?.updated_at, readerChapter?.content]);
+  }, [view, readerChapter?.id]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1279,16 +1186,16 @@ export default function App() {
             </nav>}
             {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Henüz okunabilir kayıtlı metin yok.</h2><p>Yazarlar metinlerini kaydettikçe yayın öncesinde de burada birlikte okuyabilirsiniz.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
               <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')} · {readerChapter.status==='published'?'YAYINDA':'ÇALIŞMA NÜSHASI · YAYINLANMADI'}</span><h1>{readerChapter.title}</h1>
-              <div className="reader-prose">{readerParagraphs.map((paragraph,index)=><p className="reader-attributed-text" key={(paragraph.id||'legacy')+'-'+index}>{renderAttributedReaderText(paragraph.content, readerAuthorAttribution, sentenceHighlights)}</p>)}</div>
+              <div className="reader-prose">{readerParagraphs.map((paragraph,index)=>renderReaderParagraph(paragraph.content, readerParagraphBlocks, sentenceHighlights, (paragraph.id||'legacy')+'-'+index))}</div>
             </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
               <article className="reader-page-sheet page-left">
                 <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}{readerChapter.status!=='published'?' · ÇALIŞMA NÜSHASI':''}</span>
-                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const block=findReaderAuthorBlock(normalized,readerParagraphBlocks);return <p className="reader-attributed-text" key={index}>{renderAttributedReaderText(paragraph, readerAuthorAttribution, sentenceHighlights)}</p>;})}</div>
+                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>renderReaderParagraph(paragraph, readerParagraphBlocks, sentenceHighlights, 'left-'+index))}</div>
                 <span className="reader-page-number">{readerPageIndex+1}</span>
               </article>
               <article className="reader-page-sheet page-right">
                 <span className="reader-page-kicker">{readerChapter.title}</span>
-                <div className="reader-page-prose">{(readerPages[readerPageIndex+1] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const block=readerParagraphBlocks.find(item=>item.content===normalized);return <p className="reader-attributed-text" key={index}>{renderAttributedReaderText(paragraph, readerAuthorAttribution, sentenceHighlights)}</p>;})}</div>
+                <div className="reader-page-prose">{(readerPages[readerPageIndex+1] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>renderReaderParagraph(paragraph, readerParagraphBlocks, sentenceHighlights, 'right-'+index))}</div>
                 <span className="reader-page-number">{Math.min(readerPageIndex+2,readerPages.length)}</span>
               </article>
               {readerTurn && <div className={'page-flip-overlay ' + readerTurn}><div className="page-flip-front"><span>{readerChapter.title}</span><p>{(readerPages[readerTurn==='forward'?readerPageIndex+1:readerPageIndex] || '').slice(0,450)}</p></div><div className="page-flip-back"></div></div>}

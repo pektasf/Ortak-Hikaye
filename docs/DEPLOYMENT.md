@@ -38,7 +38,7 @@ where p.id=u.id and u.email='SIZIN_EPOSTA_ADRESINIZ';
 ```
 
 3. Uygulamadan çıkış yapıp tekrar giriş yapın.
-4. Yönetici panelinden davet bağlantısı üretin. Varsayılan bağlantı 7 gün geçerli ve 10 yeni hesap kullanımlıdır.
+4. Yönetici panelinden davet bağlantısı üretin. Varsayılan bağlantı 7 gün geçerlidir ve süresi dolana kadar sınırsız sayıda yeni hesap tarafından kullanılabilir.
 5. Davet alan kişi linki açar, kendi e-postasına gönderilen OTP bağlantısıyla giriş yapar. Veritabanı token'ı doğrular ve hesabı yetkilendirir.
 
 ## Güvenlik notları

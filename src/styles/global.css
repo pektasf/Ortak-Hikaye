@@ -969,3 +969,9 @@ input,textarea,select{font-size:13px}
 .reader-author-hover{cursor:help;text-decoration:none!important;text-decoration-thickness:1px;text-underline-offset:3px;}
 .reader-author-hover:hover{ text-decoration:underline!important;text-decoration-color:rgba(150,112,78,.78)!important; }
 .reader-author-hover:focus-visible{outline:1px dotted #9a7458;outline-offset:3px;}
+
+
+/* Protected paragraphs stay readable while the current writer adds a new block. */
+.writer-rich-canvas .writer-protected-block{cursor:not-allowed;user-select:text;opacity:.92;}
+.writer-rich-canvas .writer-new-block{min-height:2em;outline:none;}
+.writer-rich-canvas .writer-new-block:empty::before{content:attr(data-placeholder);color:var(--muted,#999);pointer-events:none;}

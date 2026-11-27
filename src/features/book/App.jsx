@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase/client.js';
 import { words } from '../../lib/text.js';
 import SetupScreen from '../../components/setup/SetupScreen.jsx';
@@ -102,11 +102,86 @@ export default function App() {
   const [readerLayout, setReaderLayout] = useState('spread');
   const [readerPageIndex, setReaderPageIndex] = useState(0);
   const [readerTurn, setReaderTurn] = useState(null);
+  const [isCompactReader, setIsCompactReader] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(max-width: 760px)').matches
+      : false
+  );
+  const readerTurnTimerRef = useRef(null);
 
   const userId = session?.user?.id;
   const activeStory = stories.find(item => item.id === activeStoryId) || null;
   const activeChapter = chapters.find(item => item.id === activeChapterId) || null;
   const isStoryOwner = Boolean(activeStory && activeStory.owner_id === userId);
+  const readerChapters = chapters.filter(item => item.status === 'published');
+  const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
+  const readerPages = paginateBookText(readerChapter?.content || '');
+  const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
+  const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;
+  const readerMaxPageIndex = effectiveReaderLayout === 'spread'
+    ? Math.max(0, Math.ceil(readerPages.length / 2) * 2 - 2)
+    : Math.max(0, readerPages.length - 1);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      const syncLayout = () => setIsCompactReader(window.innerWidth <= 760);
+      syncLayout();
+      window.addEventListener('resize', syncLayout, { passive: true });
+      return () => window.removeEventListener('resize', syncLayout);
+    }
+    const media = window.matchMedia('(max-width: 760px)');
+    const syncLayout = event => setIsCompactReader(event.matches);
+    setIsCompactReader(media.matches);
+    if (media.addEventListener) media.addEventListener('change', syncLayout);
+    else media.addListener(syncLayout);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', syncLayout);
+      else media.removeListener(syncLayout);
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (readerTurnTimerRef.current !== null) window.clearTimeout(readerTurnTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (readerTurnTimerRef.current !== null) {
+      window.clearTimeout(readerTurnTimerRef.current);
+      readerTurnTimerRef.current = null;
+    }
+    setReaderTurn(null);
+    setReaderPageIndex(0);
+  }, [readerChapter?.id]);
+
+  useEffect(() => {
+    if (readerTurnTimerRef.current !== null) {
+      window.clearTimeout(readerTurnTimerRef.current);
+      readerTurnTimerRef.current = null;
+    }
+    setReaderTurn(null);
+    setReaderPageIndex(current => Math.min(current, readerMaxPageIndex));
+  }, [effectiveReaderLayout, readerMaxPageIndex]);
+
+  useEffect(() => {
+    if (view !== 'reader' || effectiveReaderLayout === 'scroll') return;
+    const handleReaderKeys = event => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.defaultPrevented) return;
+      const focused = document.activeElement;
+      const typing = focused instanceof HTMLElement && (
+        focused.isContentEditable || focused.matches('input, textarea, select, [role="textbox"]')
+      );
+      if (typing) return;
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        turnBookPage(1);
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        turnBookPage(-1);
+      }
+    };
+    window.addEventListener('keydown', handleReaderKeys);
+    return () => window.removeEventListener('keydown', handleReaderKeys);
+  }, [view, effectiveReaderLayout, readerChapter?.id, readerPageIndex, readerTurn, readerPages.length]);
 
   async function loadChapterBlocks(chapterId) {
     const { data, error } = await supabase.from('chapter_blocks')
@@ -682,22 +757,20 @@ export default function App() {
   const storyWordCount = chapters.reduce((sum,item) => sum + words(item.id === activeChapterId ? editorContent : (item.content || '')),0);
   const chapterWordLimit = activeChapter?.target_words || 1000;
   const chapterOverLimit = Boolean(activeChapter && words(editorContent) > chapterWordLimit);
-  const readerChapters = chapters.filter(item => item.status === 'published');
-  const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
-  const readerPages = paginateBookText(readerChapter?.content || '');
-  const readerPageStep = readerLayout === 'spread' ? 2 : 1;
-  const readerMaxPageIndex = readerLayout === 'spread'
-    ? Math.max(0, Math.ceil(readerPages.length / 2) * 2 - 2)
-    : Math.max(0, readerPages.length - 1);
-
   function turnBookPage(direction) {
-    if (readerTurn || readerLayout === 'scroll' || !readerPages.length) return;
+    if (readerTurn || readerTurnTimerRef.current !== null || effectiveReaderLayout === 'scroll' || !readerPages.length) return;
     const nextIndex = readerPageIndex + direction * readerPageStep;
     if (nextIndex < 0 || nextIndex > readerMaxPageIndex) return;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+      setReaderPageIndex(nextIndex);
+      return;
+    }
     setReaderTurn(direction > 0 ? 'forward' : 'backward');
-    window.setTimeout(() => {
+    readerTurnTimerRef.current = window.setTimeout(() => {
       setReaderPageIndex(nextIndex);
       setReaderTurn(null);
+      readerTurnTimerRef.current = null;
     }, 520);
   }
 
@@ -769,10 +842,11 @@ export default function App() {
           <div className="reader-toolbar">
             <label>BÖLÜM <select value={readerChapter?.id || ''} onChange={e=>{const index=readerChapters.findIndex(item=>item.id===e.target.value);setReadingIndex(Math.max(0,index));setReaderPageIndex(0);}}>{readerChapters.map((chapter,index)=><option key={chapter.id} value={chapter.id}>{String(index+1).padStart(2,'0')} · {chapter.title}</option>)}</select></label>
             <label>OKUMA DÜZENİ <select value={readerLayout} onChange={e=>{setReaderLayout(e.target.value);setReaderPageIndex(0);setReaderTurn(null);}}><option value="spread">Açık kitap · iki sayfa</option><option value="single">Tek sayfa</option><option value="scroll">Kesintisiz kaydırma</option></select></label>
+            {isCompactReader && readerLayout === 'spread' && <small className="reader-responsive-note">Mobil ekranda rahat okuma için tek sayfa gösteriliyor.</small>}
           </div>
-          <div className={'reader-book reader-layout-' + readerLayout}>
+          <div className={'reader-book reader-layout-' + effectiveReaderLayout}>
             <div className="reader-running-head"><span>{book?.title || 'Ortak Roman'}</span><span>{activeStory?.title || ''}</span></div>
-            {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Bu kitapta henüz yayınlanmış bölüm yok.</h2><p>Bir bölüm yayınlandığında burada okunabilir.</p></div> : readerLayout === 'scroll' ? <article className="reader-scroll-sheet">
+            {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Bu kitapta henüz yayınlanmış bölüm yok.</h2><p>Bir bölüm yayınlandığında burada okunabilir.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet">
               <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')}</span><h1>{readerChapter.title}</h1>
               <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
             </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
@@ -789,9 +863,9 @@ export default function App() {
               {readerTurn && <div className={'page-flip-overlay ' + readerTurn}><div className="page-flip-front"><span>{readerChapter.title}</span><p>{(readerPages[readerTurn==='forward'?readerPageIndex+1:readerPageIndex] || '').slice(0,450)}</p></div><div className="page-flip-back"></div></div>}
             </div>}
             <div className="reader-controls">
-              <button className="button light" disabled={readingIndex===0 && readerPageIndex===0} onClick={()=>{if(readerLayout!=='scroll' && readerPageIndex>0)turnBookPage(-1);else if(readingIndex>0){setReadingIndex(i=>i-1);setReaderPageIndex(0);}}}>← Önceki</button>
-              <span>{readerLayout==='scroll' ? 'Bölüm '+(readingIndex+1)+' / '+readerChapters.length : 'Sayfa '+(Math.min(readerPageIndex+1,readerPages.length)||0)+'–'+(Math.min(readerPageIndex+(readerLayout==='spread'?2:1),readerPages.length)||0)+' / '+readerPages.length}</span>
-              <button className="button" disabled={readingIndex>=readerChapters.length-1 && (readerLayout==='scroll' || readerPageIndex>=readerMaxPageIndex)} onClick={()=>{if(readerLayout!=='scroll' && readerPageIndex<readerMaxPageIndex)turnBookPage(1);else if(readingIndex<readerChapters.length-1){setReadingIndex(i=>i+1);setReaderPageIndex(0);}}}>Sonraki →</button>
+              <button className="button light" disabled={readingIndex===0 && readerPageIndex===0} onClick={()=>{if(effectiveReaderLayout!=='scroll' && readerPageIndex>0)turnBookPage(-1);else if(readingIndex>0){setReadingIndex(i=>i-1);setReaderPageIndex(0);}}}>← Önceki</button>
+              <span>{effectiveReaderLayout==='scroll' ? 'Bölüm '+(readingIndex+1)+' / '+readerChapters.length : 'Sayfa '+(Math.min(readerPageIndex+1,readerPages.length)||0)+'–'+(Math.min(readerPageIndex+(readerLayout==='spread'?2:1),readerPages.length)||0)+' / '+readerPages.length}</span>
+              <button className="button" disabled={readingIndex>=readerChapters.length-1 && (effectiveReaderLayout==='scroll' || readerPageIndex>=readerMaxPageIndex)} onClick={()=>{if(effectiveReaderLayout!=='scroll' && readerPageIndex<readerMaxPageIndex)turnBookPage(1);else if(readingIndex<readerChapters.length-1){setReadingIndex(i=>i+1);setReaderPageIndex(0);}}}>Sonraki →</button>
             </div>
           </div>
         </section> : view === 'home' ? <section className="home-page">

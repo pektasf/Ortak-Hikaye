@@ -145,3 +145,11 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [x] Yazar bazında vurgulama sayısının profil istatistiğine eklenmesi
 - [x] Metin değiştiğinde artık eşleşmeyen vurguların temizlenmesi
 - [ ] Farklı kullanıcılarla gerçek hesaplar üzerinden vurgu ve eşzamanlı yazma testi
+
+## Aşama 11 — Okuyucu gezinme ve mobil uyum
+- [x] Dar ekranlarda açık kitap tercihinin otomatik tek sayfa düzenine dönüşmesi
+- [x] Tek/çift sayfa modlarında sol ve sağ ok tuşlarıyla gezinme
+- [x] Yazı alanları odaktayken okuma kısayollarının klavye girişine müdahale etmemesi
+- [x] Hızlı art arda tıklamalarda sayfa geçişinin kilitlenmesi
+- [x] Hareketi azaltma tercihi etkinse sayfanın animasyon beklemeden değişmesi
+- [ ] Masaüstü, tablet ve mobil gerçek tarayıcı testi

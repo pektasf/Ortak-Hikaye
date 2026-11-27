@@ -101,6 +101,7 @@ export default function App() {
   const [readerPageIndex, setReaderPageIndex] = useState(0);
   const [readerPages, setReaderPages] = useState([]);
   const readerPageMeasureRef = useRef(null);
+  const readerRestorePendingRef = useRef(false);
   const readerProgressTimerRef = useRef(null);
   const [readerScrollRestore, setReaderScrollRestore] = useState(0);
   const [draftSaveState, setDraftSaveState] = useState('idle');
@@ -155,7 +156,8 @@ export default function App() {
       readerTurnTimerRef.current = null;
     }
     setReaderTurn(null);
-    setReaderPageIndex(0);
+    if(readerRestorePendingRef.current) readerRestorePendingRef.current=false;
+    else setReaderPageIndex(0);
   }, [readerChapter?.id]);
 
   useEffect(() => {
@@ -290,7 +292,7 @@ export default function App() {
       setActiveChapterId(current=>(data||[]).some(item=>item.id===current)?current:restoredChapterId);
       const restoredReaderIndex=(data||[]).filter(item=>item.status==='published').findIndex(item=>item.id===progress?.chapter_id);if(restoredReaderIndex>=0)setReadingIndex(restoredReaderIndex);
       if(progress?.reader_layout&&['single','spread','scroll'].includes(progress.reader_layout))setReaderLayout(progress.reader_layout);
-      if(progress?.chapter_id===restoredChapterId){setReaderPageIndex(Math.max(0,progress.page_index||0));setReaderScrollRestore(Math.max(0,progress.scroll_position||0));}
+      if(progress?.chapter_id===restoredChapterId){readerRestorePendingRef.current=true;setReaderPageIndex(Math.max(0,progress.page_index||0));setReaderScrollRestore(Math.max(0,progress.scroll_position||0));}
     }
   }
 

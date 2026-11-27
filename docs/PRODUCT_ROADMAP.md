@@ -164,3 +164,19 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [x] Ana bölüm kaydedildiğinde geçici taslağı temizlemek
 - [ ] Gerçek tarayıcıda masaüstü/tablet/mobil taşma ve sayfa sınırı görsel testi
 - [ ] İki farklı hesapla davet, kilit devri ve ortak cümle vurgusu testi
+
+## Aşama 13 — Katkı başına kelime ve yazma sırası
+
+- [ ] Her yayımlanan yeni yazar katkısı en az 100 kelime olmalı; bu kontrol istemcide ve sunucuda uygulanmalı.
+- [ ] Kişisel taslak kaydı minimum kelime şartından muaf olmalı.
+- [ ] Bir yazar aynı yazma oturumunda varsayılan olarak en fazla 3 katkı yayımlayabilmeli.
+- [ ] Yazar, hakkı bitmeden istediği an sırasını bırakabilmeli.
+- [ ] Katkı yayımlandıktan sonra yazar isterse yazma kilidini koruyup yeni katkıya devam edebilmeli.
+- [ ] Son katkı hakkı kullanıldığında kilit otomatik bırakılmalı ve sıradaki yazar yazabilmeli.
+- [ ] Katkı sayısı ve sıra durumu yazma ekranında görünmeli.
+- [ ] Hikâye sahibi, hikâye ayarlarından art arda katkı sayısını değiştirebilmeli.
+- [ ] Katkılar ayrı yazarlık kayıtları olarak korunmalı; önceki yazarların paragrafları değiştirilememeli.
+- [ ] Kilit süresi dolması, sayfa yenileme, bağlantı kesilmesi ve eşzamanlı iki yazar senaryoları test edilmeli.
+
+**Kesin ürün varsayılanları:** minimum katkı 100 kelime; art arda katkı hakkı 3. Yazarın taslak kaydı serbesttir. Minimum kelime kontrolü yalnızca ortak metne katkı yayımlanırken uygulanır.
+

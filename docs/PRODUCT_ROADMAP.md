@@ -38,9 +38,9 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 ## Aşama 2 — Okuma deneyimi
 - [ ] Kitap kapağı, başlık sayfası ve içindekiler
 - [ ] Hikâye ve bölüm gezintisi; önceki/sonraki bölüm
-- [ ] Sayfalı okuma modu
-- [ ] Kesintisiz kaydırma modu
-- [ ] Son okunan paragraf/scroll konumunu otomatik kaydetme
+- [x] Sayfalı okuma modu (gerçek DOM ölçümüne göre sayfa kırılımı)
+- [x] Kesintisiz kaydırma modu
+- [x] Son okunan bölüm, sayfa, düzen ve kaydırma konumunu otomatik kaydetme
 - [ ] Yer imleri ve kaldığın yerden devam et
 - [ ] Yazı tipi/boyutu, satır aralığı ve sepya/açık/koyu temaları
 - [ ] Mobil ve masaüstünde erişilebilir okuma deneyimi
@@ -125,7 +125,7 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [x] Odak alanında yatay taşmayı engelleyen esnek genişlik ve metin kırma kuralları
 - [x] Tek sayfa, açık kitap ve kaydırmalı okuma düzeni
 - [x] Açık kitap görünümünde CSS 3D sayfa çevirme animasyonu
-- [ ] Uzun kitaplar için ölçüme dayalı gerçek içerik taşması ve otomatik sayfa kırılımı
+- [x] Uzun kitaplar için ölçüme dayalı gerçek içerik taşması ve otomatik sayfa kırılımı
 - [ ] Word (.docx) içe/dışa aktarma
 - [ ] Gerçek zamanlı ortak imleçler ve yazım çakışması testi
 
@@ -137,14 +137,14 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [x] Defter, Word ve kitap sayfası genişlik seçenekleri
 - [x] Kitap okuyucu için merkezi cilt/gutter ve iki sayfa dengesi
 - [x] Düşük yükseklikli ekran ve mobil düzen düzeltmeleri
-- [ ] Farklı çözünürlüklerde gerçek tarayıcı görsel testi
+- [ ] Farklı çözünürlüklerde gerçek tarayıcı görsel testi (tarayıcı testi bekliyor)
 
 ## Aşama 10 — Ortak cümle vurguları
 - [x] Yazarın seçtiği cümleyi paragraf içinde altını çizerek vurgulaması
 - [x] Cümle vurgularının tüm hikâye üyelerine görünmesi
 - [x] Yazar bazında vurgulama sayısının profil istatistiğine eklenmesi
 - [x] Metin değiştiğinde artık eşleşmeyen vurguların temizlenmesi
-- [ ] Farklı kullanıcılarla gerçek hesaplar üzerinden vurgu ve eşzamanlı yazma testi
+- [ ] Farklı kullanıcılarla gerçek hesaplar üzerinden vurgu ve eşzamanlı yazma testi (ikinci test hesabı gerekli)
 
 ## Aşama 11 — Okuyucu gezinme ve mobil uyum
 - [x] Dar ekranlarda açık kitap tercihinin otomatik tek sayfa düzenine dönüşmesi
@@ -153,3 +153,14 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [x] Hızlı art arda tıklamalarda sayfa geçişinin kilitlenmesi
 - [x] Hareketi azaltma tercihi etkinse sayfanın animasyon beklemeden değişmesi
 - [ ] Masaüstü, tablet ve mobil gerçek tarayıcı testi
+
+
+## Aşama 12 — Okuma konumu ve taslak güvenliği
+- [x] Sayfa ölçümünü gerçek kitap metni stilleri ve görünür sayfa yüksekliği üzerinden yapmak
+- [x] Ekran boyutu ve font yüklenmesi değiştiğinde sayfaları yeniden ölçmek
+- [x] Bölüm/sayfa/okuma düzeni/kaydırma konumunu kullanıcı bazında saklamak
+- [x] Cihaz içi ve kullanıcıya özel sunucu taslağı otomatik kaydı
+- [x] Daha yeni taslak bulunduğunda kullanıcı onayıyla geri yükleme
+- [x] Ana bölüm kaydedildiğinde geçici taslağı temizlemek
+- [ ] Gerçek tarayıcıda masaüstü/tablet/mobil taşma ve sayfa sınırı görsel testi
+- [ ] İki farklı hesapla davet, kilit devri ve ortak cümle vurgusu testi

@@ -201,7 +201,7 @@ export default function App() {
     const {data:remoteDraft,error:draftError}=await supabase.from('chapter_drafts').select('title,status,blocks,updated_at').eq('chapter_id',chapterId).eq('user_id',userId).maybeSingle();
     if(draftError)setNotice('Taslak kontrol edilemedi: '+draftError.message);
     const newest=[remoteDraft,localDraft].filter(item=>item?.updated_at&&Array.isArray(item.blocks)).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at))[0];
-    if(newest&&new Date(newest.updated_at).getTime()>new Date(activeChapter?.updated_at||0).getTime()&&!draftRestorePromptRef.current.has(chapterId)){draftRestorePromptRef.current.add(chapterId);if(window.confirm('Bu bölüm için daha yeni bir taslak bulundu. Taslağı geri yüklemek ister misin?')){setEditorTitle(newest.title||activeChapter?.title||'');setEditorStatus(newest.status||'draft');const restored=newest.blocks.map(item=>({...item,author_id:item.author_id||userId}));setEditorBlocks(restored);setEditorContent(restored.map(item=>item.content).join('\n\n'));setEditorDirty(true);}}
+    if(newest&&new Date(newest.updated_at).getTime()>new Date(chapters.find(item=>item.id===chapterId)?.updated_at||0).getTime()&&!draftRestorePromptRef.current.has(chapterId)){draftRestorePromptRef.current.add(chapterId);if(window.confirm('Bu bölüm için daha yeni bir taslak bulundu. Taslağı geri yüklemek ister misin?')){setEditorTitle(newest.title||activeChapter?.title||'');setEditorStatus(newest.status||'draft');const restored=newest.blocks.map(item=>({...item,author_id:item.author_id||userId}));setEditorBlocks(restored);setEditorContent(restored.map(item=>item.content).join('\n\n'));setEditorDirty(true);}}
     const { data: highlights, error: highlightError } = await supabase
       .from('chapter_sentence_highlights')
       .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
@@ -288,6 +288,7 @@ export default function App() {
         .select('chapter_id,page_index,reader_layout,scroll_position').eq('user_id', userId).eq('story_id', storyId).maybeSingle();
       const restoredChapterId=(data||[]).some(item=>item.id===progress?.chapter_id)?progress.chapter_id:(data?.[0]?.id||'');
       setActiveChapterId(current=>(data||[]).some(item=>item.id===current)?current:restoredChapterId);
+      const restoredReaderIndex=(data||[]).filter(item=>item.status==='published').findIndex(item=>item.id===progress?.chapter_id);if(restoredReaderIndex>=0)setReadingIndex(restoredReaderIndex);
       if(progress?.reader_layout&&['single','spread','scroll'].includes(progress.reader_layout))setReaderLayout(progress.reader_layout);
       if(progress?.chapter_id===restoredChapterId){setReaderPageIndex(Math.max(0,progress.page_index||0));setReaderScrollRestore(Math.max(0,progress.scroll_position||0));}
     }
@@ -627,6 +628,7 @@ export default function App() {
   async function saveChapter(event) {
     event.preventDefault();
     if (!activeChapter || !editorTitle.trim()) return;
+    if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);
     setBusy(true);
     const richCanvas = document.querySelector('.writer-rich-canvas');
     let blocksToSave = editorBlocks.map(block => ({ id: block.id || null, content: block.content }));

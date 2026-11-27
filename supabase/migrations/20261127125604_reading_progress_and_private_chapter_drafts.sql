@@ -1,0 +1,20 @@
+alter table public.reading_progress add column if not exists page_index integer not null default 0;
+alter table public.reading_progress add column if not exists reader_layout text not null default 'spread';
+do $$ begin
+ if not exists(select 1 from pg_constraint where conrelid='public.reading_progress'::regclass and conname='reading_progress_page_index_check') then alter table public.reading_progress add constraint reading_progress_page_index_check check(page_index>=0); end if;
+ if not exists(select 1 from pg_constraint where conrelid='public.reading_progress'::regclass and conname='reading_progress_reader_layout_check') then alter table public.reading_progress add constraint reading_progress_reader_layout_check check(reader_layout in ('single','spread','scroll')); end if;
+end $$;
+create table if not exists public.chapter_drafts(chapter_id uuid not null references public.chapters(id) on delete cascade,user_id uuid not null references public.profiles(id) on delete cascade,title text not null,status text not null default 'draft',blocks jsonb not null default '[]'::jsonb,updated_at timestamptz not null default now(),constraint chapter_drafts_pkey primary key(chapter_id,user_id),constraint chapter_drafts_title_check check(char_length(btrim(title)) between 1 and 120),constraint chapter_drafts_status_check check(status in ('draft','published')),constraint chapter_drafts_blocks_check check(jsonb_typeof(blocks)='array' and jsonb_array_length(blocks)<=500));
+create index if not exists chapter_drafts_user_updated_idx on public.chapter_drafts(user_id,updated_at desc);
+alter table public.chapter_drafts enable row level security;
+revoke all on public.chapter_drafts from anon,public;
+grant select,insert,update,delete on public.chapter_drafts to authenticated;
+drop policy if exists "authors read own chapter drafts" on public.chapter_drafts;
+create policy "authors read own chapter drafts" on public.chapter_drafts for select to authenticated using(user_id=(select auth.uid()) and exists(select 1 from public.chapters c where c.id=chapter_drafts.chapter_id and private.is_story_member(c.story_id)));
+drop policy if exists "authors create own chapter drafts" on public.chapter_drafts;
+create policy "authors create own chapter drafts" on public.chapter_drafts for insert to authenticated with check(user_id=(select auth.uid()) and exists(select 1 from public.chapters c where c.id=chapter_drafts.chapter_id and private.is_story_member(c.story_id)));
+drop policy if exists "authors update own chapter drafts" on public.chapter_drafts;
+create policy "authors update own chapter drafts" on public.chapter_drafts for update to authenticated using(user_id=(select auth.uid()) and exists(select 1 from public.chapters c where c.id=chapter_drafts.chapter_id and private.is_story_member(c.story_id))) with check(user_id=(select auth.uid()) and exists(select 1 from public.chapters c where c.id=chapter_drafts.chapter_id and private.is_story_member(c.story_id)));
+drop policy if exists "authors delete own chapter drafts" on public.chapter_drafts;
+create policy "authors delete own chapter drafts" on public.chapter_drafts for delete to authenticated using(user_id=(select auth.uid()) and exists(select 1 from public.chapters c where c.id=chapter_drafts.chapter_id and private.is_story_member(c.story_id)));
+comment on table public.chapter_drafts is 'Kişiye özel çalışma taslakları; ana bölüm metnine ve bölüm sürümlerine dokunmaz.';

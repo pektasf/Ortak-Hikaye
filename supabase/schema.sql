@@ -57,7 +57,7 @@ create table if not exists public.story_votes (
 );
 create table if not exists public.invites (
  token_hash bytea primary key,
- max_uses integer not null default 10 check(max_uses > 0),
+ max_uses integer default null check(max_uses is null or max_uses > 0),
  uses_count integer not null default 0 check(uses_count >= 0),
  expires_at timestamptz not null,
  revoked_at timestamptz,
@@ -79,14 +79,14 @@ language sql stable security definer set search_path=public as $$
 $$;
 
 -- An invitation token is never readable from the client. Only its SHA-256 hash is stored.
-create or replace function public.create_invite(p_max_uses integer default 10, p_hours_valid integer default 168)
+create or replace function public.create_invite(p_max_uses integer default null, p_hours_valid integer default 168)
 returns text language plpgsql security definer set search_path=public as $$
 declare v_token text;
 begin
  if not public.is_moderator() or public.current_profile_role() <> 'owner' then
    raise exception 'Yalnızca kitap sahibi davet oluşturabilir.';
  end if;
- if p_max_uses < 1 or p_max_uses > 100 then raise exception 'Davet kullanım sayısı 1-100 arasında olmalı.'; end if;
+ if p_max_uses is not null and (p_max_uses < 1 or p_max_uses > 100) then raise exception 'Davet kullanım sayısı 1-100 arasında olmalı veya sınırsız bırakılmalı.'; end if;
  if p_hours_valid < 1 or p_hours_valid > 720 then raise exception 'Davet süresi 1-720 saat arasında olmalı.'; end if;
  v_token := encode(gen_random_bytes(24),'hex');
  insert into public.invites(token_hash,max_uses,expires_at,created_by)

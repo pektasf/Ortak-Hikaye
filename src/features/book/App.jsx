@@ -335,14 +335,23 @@ export default function App() {
     setStoryBusy(false);
   }
 
-  async function openProfile(targetId = userId) {
+  async function openProfile(targetId) {
+    // onClick passes a React event when a handler is supplied directly.
+    // Never forward that DOM event to Supabase; accept only a user ID.
+    const profileUserId = typeof targetId === 'string' && targetId.trim()
+      ? targetId.trim()
+      : userId;
+    if (!profileUserId) {
+      setNotice('Profil bilgisi alınamadı. Lütfen yeniden giriş yap.');
+      return;
+    }
     if (editorDirty && !window.confirm('Kaydedilmemiş bölüm değişikliklerin var. Profil sayfasına geçmek istiyor musun?')) return;
     setProfileBusy(true);
-    const { data, error } = await supabase.rpc('get_author_profile', { p_user_id: targetId });
+    const { data, error } = await supabase.rpc('get_author_profile', { p_user_id: profileUserId });
     if (error) setNotice('Profil yüklenemedi: ' + error.message);
     else {
       setProfile(data);
-      setPublicProfileId(targetId);
+      setPublicProfileId(profileUserId);
       setProfileForm({ display_name: data.display_name || '', bio: data.bio || '' });
       setView('profile');
     }
@@ -605,7 +614,7 @@ export default function App() {
   return <div className="app-shell">
     <header className="topbar">
       <a className="brand" href={window.location.pathname}>✦ ORTAK <b>ROMAN</b></a>
-      {session ? <div className="account"><button className="text-button" onClick={()=>setView('home')}>Ana sayfa</button><button className="text-button" onClick={()=>setView('discover')}>Yazarları keşfet</button><button className="button light profile-nav-button" disabled={profileBusy} onClick={openProfile}>{profileBusy ? 'Açılıyor…' : 'Profilim'}</button><button className="button light" onClick={() => supabase.auth.signOut()}>Çıkış</button></div> : <span className="eyebrow">DAVETLİ YAZARLAR</span>}
+      {session ? <div className="account"><button className="text-button" onClick={()=>setView('home')}>Ana sayfa</button><button className="text-button" onClick={()=>setView('discover')}>Yazarları keşfet</button><button className="button light profile-nav-button" disabled={profileBusy} onClick={() => openProfile()}>{profileBusy ? 'Açılıyor…' : 'Profilim'}</button><button className="button light" onClick={() => supabase.auth.signOut()}>Çıkış</button></div> : <span className="eyebrow">DAVETLİ YAZARLAR</span>}
     </header>
     <main className={session ? 'content workspace-content' : 'content login-content'}>
       {!session ? <div className="login-layout">

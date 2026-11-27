@@ -31,7 +31,14 @@ jobs:
         run: |
           test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL repository secret" && exit 1)
           test -n "$VITE_SUPABASE_ANON_KEY" || (echo "Missing VITE_SUPABASE_ANON_KEY repository secret" && exit 1)
-          case "$VITE_SUPABASE_URL" in https://*.supabase.co) ;; *) echo "VITE_SUPABASE_URL format is invalid"; exit 1 ;; esac
+          node --input-type=module <<'NODE'
+          const value = process.env.VITE_SUPABASE_URL.trim();
+          let parsed;
+          try { parsed = new URL(value); } catch { throw new Error('VITE_SUPABASE_URL is not a valid URL.'); }
+          if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.supabase.co')) {
+            throw new Error('VITE_SUPABASE_URL must be an HTTPS Supabase project URL.');
+          }
+          NODE
           echo "Supabase build configuration is present."
       - name: Install dependencies
         run: npm install --no-audit --no-fund

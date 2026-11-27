@@ -112,6 +112,10 @@ export default function App() {
   const [stories, setStories] = useState([]);
   const [activeStoryId, setActiveStoryId] = useState(() => { try { return window.localStorage.getItem('ortak_roman_active_story') || ''; } catch { return ''; } });
   const [storyTitleDraft, setStoryTitleDraft] = useState('');
+  const [storyThemeDraft, setStoryThemeDraft] = useState('');
+  const [storyDescriptionDraft, setStoryDescriptionDraft] = useState('');
+  const [storyTargetWordsDraft, setStoryTargetWordsDraft] = useState(0);
+  const [storySettingsBusy, setStorySettingsBusy] = useState(false);
   const [storyTitleBusy, setStoryTitleBusy] = useState(false);
   const [readerAuthors, setReaderAuthors] = useState([]);
   const [chapters, setChapters] = useState([]);
@@ -127,6 +131,8 @@ export default function App() {
   const [editorDirty, setEditorDirty] = useState(false);
   const [newStoryTitle, setNewStoryTitle] = useState('');
   const [newStoryDescription, setNewStoryDescription] = useState('');
+  const [newStoryTheme, setNewStoryTheme] = useState('');
+  const [newStoryTargetWords, setNewStoryTargetWords] = useState(0);
   const [newChapterTitle, setNewChapterTitle] = useState('');
   const [storyBusy, setStoryBusy] = useState(false);
   const [storyInviteLinks, setStoryInviteLinks] = useState({});
@@ -553,14 +559,19 @@ export default function App() {
   }, [view, activeStoryId, activeChapterId]);
 
   useEffect(() => {
-    if (activeStory) setStoryTitleDraft(activeStory.title || '');
-  }, [activeStory?.id, activeStory?.title]);
+    if (activeStory) {
+      setStoryTitleDraft(activeStory.title || '');
+      setStoryThemeDraft(activeStory.theme || '');
+      setStoryDescriptionDraft(activeStory.description || '');
+      setStoryTargetWordsDraft(activeStory.target_words ?? 0);
+    }
+  }, [activeStory?.id, activeStory?.title, activeStory?.theme, activeStory?.description, activeStory?.target_words]);
 
   useEffect(() => {
     if (!book || settingsDirty) return;
     setSettings({
       title: book.title || '', subtitle: book.subtitle || '', note: book.note || '',
-      target_words: book.target_words || 1000, extension_words: book.extension_words || 1000
+      target_words: book.target_words ?? 0, extension_words: book.extension_words ?? 0
     });
   }, [book?.id, book?.title, book?.subtitle, book?.note, book?.target_words, book?.extension_words, settingsDirty]);
 
@@ -620,17 +631,29 @@ export default function App() {
     event.preventDefault();
     if (!newStoryTitle.trim() || !book?.id) return;
     setStoryBusy(true);
+    const targetWords = Number(newStoryTargetWords);
+    if (!Number.isInteger(targetWords) || targetWords < 0 || targetWords > 1000000) {
+      setNotice('Hikâye kelime sınırı 0 veya 1.000.000 arasında tam sayı olmalı.');
+      setStoryBusy(false);
+      return;
+    }
     const { data, error } = await supabase.rpc('create_story', {
       p_book_id: book.id, p_title: newStoryTitle.trim(),
       p_description: newStoryDescription.trim()
     });
     if (error) setNotice('Hikâye oluşturulamadı: ' + error.message);
     else {
-      setStories(items => [data, ...items]);
+      const { data: configured, error: configError } = await supabase.from('stories').update({
+        theme: newStoryTheme.trim(), target_words: targetWords
+      }).eq('id', data.id).select().single();
+      const createdStory = configError ? data : configured;
+      setStories(items => [createdStory, ...items]);
       setActiveStoryId(data.id);
       setNewStoryTitle('');
       setNewStoryDescription('');
-      setNotice('Hikâyen oluşturuldu. İlk bölümünü şimdi ekleyebilirsin.');
+      setNewStoryTheme('');
+      setNewStoryTargetWords(0);
+      setNotice(configError ? 'Hikâye oluşturuldu ancak tema ve kelime ayarları kaydedilemedi: ' + configError.message : 'Hikâyen oluşturuldu. Tema ve kelime sınırı kaydedildi. İlk bölümünü ekleyebilirsin.');
     }
     setStoryBusy(false);
   }
@@ -956,13 +979,34 @@ export default function App() {
     setStoryTitleBusy(false);
   }
 
+  async function saveStorySettings(event) {
+    event.preventDefault();
+    if (!activeStory || !isStoryOwner) return;
+    const targetWords = Number(storyTargetWordsDraft);
+    if (!Number.isInteger(targetWords) || targetWords < 0 || targetWords > 1000000) {
+      setNotice('Hikâye kelime sınırı 0 veya 1.000.000 arasında tam sayı olmalı.');
+      return;
+    }
+    setStorySettingsBusy(true);
+    const { data, error } = await supabase.from('stories').update({
+      theme: storyThemeDraft.trim(), description: storyDescriptionDraft.trim(),
+      target_words: targetWords, updated_at: new Date().toISOString()
+    }).eq('id', activeStory.id).select().single();
+    if (error) setNotice('Hikâye ayarları kaydedilemedi: ' + error.message);
+    else {
+      setStories(items => items.map(item => item.id === data.id ? data : item));
+      setNotice('Hikâye konusu, açıklaması ve kelime sınırı kaydedildi.');
+    }
+    setStorySettingsBusy(false);
+  }
+
   async function saveBookSettings(event) {
     event.preventDefault();
     if (role !== 'owner' || !book?.id) return;
     const targetWords = Number(settings.target_words);
     const extensionWords = Number(settings.extension_words);
-    if (!Number.isInteger(targetWords) || targetWords < 100 || !Number.isInteger(extensionWords) || extensionWords < 100) {
-      setNotice('Kelime hedefleri en az 100 ve tam sayı olmalı.');
+    if (!Number.isInteger(targetWords) || targetWords < 0 || !Number.isInteger(extensionWords) || extensionWords < 0) {
+      setNotice('Kelime değerleri sıfır veya pozitif tam sayı olmalı.');
       return;
     }
     setSettingsBusy(true);
@@ -993,8 +1037,8 @@ export default function App() {
   const totalWords = chapters.reduce((sum, item) => sum + words(item.content || ''), 0);
   const publishedChapters = chapters.filter(item => item.status === 'published').length;
   const storyWordCount = chapters.reduce((sum,item) => sum + words(item.id === activeChapterId ? editorContent : (item.content || '')),0);
-  const chapterWordLimit = activeChapter?.target_words || 1000;
-  const chapterOverLimit = Boolean(activeChapter && words(editorContent) > chapterWordLimit);
+  const chapterWordLimit = Number(activeChapter?.target_words ?? 0);
+  const chapterOverLimit = Boolean(activeChapter && chapterWordLimit > 0 && words(editorContent) > chapterWordLimit);
 
 
   function turnBookPage(direction) {
@@ -1161,6 +1205,8 @@ export default function App() {
               <form onSubmit={createStory}>
                 <input required maxLength={120} value={newStoryTitle} onChange={e => setNewStoryTitle(e.target.value)} placeholder="Hikâyenin adı" aria-label="Yeni hikâye adı"/>
                 <textarea rows={2} maxLength={600} value={newStoryDescription} onChange={e => setNewStoryDescription(e.target.value)} placeholder="Kısa açıklama (isteğe bağlı)" aria-label="Hikâye açıklaması"/>
+                <textarea rows={2} maxLength={1200} value={newStoryTheme} onChange={e => setNewStoryTheme(e.target.value)} placeholder="Konu / tema / hikâyenin dünyası (isteğe bağlı)" aria-label="Hikâye konusu ve teması"/>
+                <label className="story-create-limit">Hikâye kelime sınırı <input type="number" min="0" max="1000000" step="100" value={newStoryTargetWords} onChange={e => setNewStoryTargetWords(e.target.value)}/><small>0 = sınırsız</small></label>
                 <button className="button full" disabled={storyBusy || !newStoryTitle.trim() || !book?.id}>{storyBusy ? 'Oluşturuluyor…' : '+ Hikâye oluştur'}</button>
               </form>
             </div>
@@ -1170,10 +1216,13 @@ export default function App() {
             {activeStory ? <>
               <div className="story-heading">
                 <div><span className="eyebrow">SEÇİLİ HİKÂYE</span>{isStoryOwner ? <form className="story-title-edit" onSubmit={saveStoryTitle}><input aria-label="Hikâye adı" maxLength={120} value={storyTitleDraft} onChange={e=>setStoryTitleDraft(e.target.value)} /><button className="button light" disabled={storyTitleBusy || !storyTitleDraft.trim() || storyTitleDraft.trim()===activeStory.title}>{storyTitleBusy?'Kaydediliyor…':'Adı kaydet'}</button></form> : <h2>{activeStory.title}</h2>}<p>{activeStory.description || 'Bu hikâyenin dünyası henüz tanımlanmadı.'}</p></div>
-                <div className="story-heading-actions"><span className="story-word-meter">{chapters.reduce((n,c)=>n+words(c.content||''),0).toLocaleString('tr-TR')} / {(activeStory.target_words||10000).toLocaleString('tr-TR')} kelime</span><button className="button light" onClick={()=>{setReadingIndex(0);setReaderPageIndex(0);setView('reader');}}>Kitabı oku</button><span className={'status-pill ' + activeStory.status}>{activeStory.status === 'published' ? 'Yayında' : activeStory.status === 'archived' ? 'Arşiv' : 'Taslak'}</span><button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(activeStory.id)}>Davet bağlantısı</button>{isStoryOwner && <button className="button light danger-button" disabled={storyBusy} onClick={deleteStory}>Hikâyeyi sil</button>}</div>
+                <div className="story-heading-actions"><span className="story-word-meter">{chapters.reduce((n,c)=>n+words(c.content||''),0).toLocaleString('tr-TR')} / {Number(activeStory.target_words ?? 0) > 0 ? Number(activeStory.target_words).toLocaleString('tr-TR') + ' kelime' : 'Sınırsız'}</span><button className="button light" onClick={()=>{setReadingIndex(0);setReaderPageIndex(0);setView('reader');}}>Kitabı oku</button><span className={'status-pill ' + activeStory.status}>{activeStory.status === 'published' ? 'Yayında' : activeStory.status === 'archived' ? 'Arşiv' : 'Taslak'}</span><button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(activeStory.id)}>Davet bağlantısı</button>{isStoryOwner && <button className="button light danger-button" disabled={storyBusy} onClick={deleteStory}>Hikâyeyi sil</button>}</div>
               </div>
 
-              {isStoryOwner && <div className="story-target-control"><label>Hikâye kelime hedefi <input type="number" min="100" max="1000000" step="100" value={activeStory.target_words || 10000} onChange={e=>{const target_words=Number(e.target.value);setStories(items=>items.map(s=>s.id===activeStory.id?{...s,target_words}:s));}} onBlur={async e=>{const {error}=await supabase.from('stories').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeStory.id);if(error)setNotice('Hedef güncellenemedi: '+error.message);else setNotice('Hikâye kelime hedefi güncellendi.');}}/></label><span>{storyWordCount.toLocaleString('tr-TR')} / {(activeStory.target_words||10000).toLocaleString('tr-TR')} kelime · Hikâyedeki tüm bölümlerin toplamı</span></div>}
+              {isStoryOwner && <form className="story-target-control story-settings-form" onSubmit={saveStorySettings}>
+                <div className="story-settings-grid"><label>Hikâye konusu / teması<textarea rows={2} maxLength={1200} value={storyThemeDraft} onChange={e=>setStoryThemeDraft(e.target.value)} placeholder="Örn. İstanbul'da geçen psikolojik gerilim; yalnızlık, güven ve sırlar"/></label><label>Hikâye açıklaması<textarea rows={2} maxLength={600} value={storyDescriptionDraft} onChange={e=>setStoryDescriptionDraft(e.target.value)} placeholder="Okura ve yazarlara kısa açıklama"/></label></div>
+                <div className="story-settings-footer"><label>Hikâye kelime sınırı <input type="number" min="0" max="1000000" step="100" value={storyTargetWordsDraft} onChange={e=>setStoryTargetWordsDraft(e.target.value)}/><small>0 = sınırsız · Mevcut: {storyWordCount.toLocaleString('tr-TR')} kelime</small></label><button className="button light" disabled={storySettingsBusy}>{storySettingsBusy ? 'Kaydediliyor…' : 'Hikâye ayarlarını kaydet'}</button></div>
+              </form>}
               <div className="chapter-layout">
                 <aside className="chapter-sidebar">
                   <div className="chapter-sidebar-title"><h3>Bölümler</h3><span>{chapters.length}</span></div>
@@ -1211,7 +1260,7 @@ export default function App() {
                       <span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime</span>
                     </div>}
                     <input className="chapter-title-input" required maxLength={120} disabled={!writingLock?.acquired} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı" placeholder="Bölüm başlığı"/>
-                    <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} / {(activeChapter.target_words||1000).toLocaleString('tr-TR')} kelime</span><label>Durum <select disabled={!writingLock?.acquired} value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label><label>Bölüm hedefi <input className="inline-word-target" type="number" min="100" max="100000" step="100" value={activeChapter.target_words || 1000} onChange={async e=>{const target_words=Number(e.target.value);setChapters(items=>items.map(c=>c.id===activeChapter.id?{...c,target_words}:c));}} onBlur={async e=>{const {error}=await supabase.from('chapters').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeChapter.id);if(error)setNotice('Bölüm hedefi güncellenemedi: '+error.message);else setNotice('Bölüm kelime hedefi güncellendi.');}}/></label></div>
+                    <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} / {chapterWordLimit > 0 ? chapterWordLimit.toLocaleString('tr-TR') + ' kelime' : 'Sınır yok'}</span><label>Durum <select disabled={!writingLock?.acquired} value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label><label>Bölüm kelime sınırı (0 = sınırsız) <input className="inline-word-target" type="number" min="0" max="100000" step="100" value={activeChapter.target_words ?? 0} onChange={e=>{const target_words=Number(e.target.value);setChapters(items=>items.map(c=>c.id===activeChapter.id?{...c,target_words}:c));}} onBlur={async e=>{const value=Number(e.target.value);if(!Number.isInteger(value)||value<0||value>100000){setNotice('Bölüm sınırı 0-100.000 arasında olmalı.');return;}const {error}=await supabase.from('chapters').update({target_words:value,updated_at:new Date().toISOString()}).eq('id',activeChapter.id);if(error)setNotice('Bölüm sınırı güncellenemedi: '+error.message);else setNotice(value===0?'Bölüm kelime sınırı kaldırıldı.':'Bölüm kelime sınırı güncellendi.');}}/></label></div>
                     {chapterOverLimit && <div className="word-limit-warning">Bölüm kelime sınırını aştın. Kaydedebilmek için {Math.max(0,words(editorContent)-chapterWordLimit)} kelime azalt veya bölüm hedefini yükselt.</div>}
                     {writingLock && <div className={'writing-presence ' + (writingLock.acquired ? 'is-self' : 'is-other')}><span className="writing-pencil">✎</span>{writingLock.acquired ? 'Şu anda bu bölümü sen yazıyorsun. Sıra sende.' : (writingLock.display_name || 'Bir yazar') + ' şu anda yazıyor · Bu bölüm geçici olarak kilitli.'}</div>}
                     <div className={'chapter-blocks-editor' + (focusMode ? ' document-page-canvas' : '')} aria-label="Paragraf yazma alanı">
@@ -1254,8 +1303,8 @@ export default function App() {
             <label>Kitap başlığı<input required maxLength={100} value={settings.title} onChange={e => {setSettings(v => ({...v,title:e.target.value}));setSettingsDirty(true);}}/></label>
             <label>Alt başlık<input maxLength={160} value={settings.subtitle} onChange={e => {setSettings(v => ({...v,subtitle:e.target.value}));setSettingsDirty(true);}}/></label>
             <label>Kitap açıklaması<textarea rows={3} value={settings.note} onChange={e => {setSettings(v => ({...v,note:e.target.value}));setSettingsDirty(true);}}/></label>
-            <div className="settings-numbers"><label>Kelime hedefi<input type="number" min="100" step="100" value={settings.target_words} onChange={e => {setSettings(v => ({...v,target_words:e.target.value}));setSettingsDirty(true);}}/></label><label>Uzatma miktarı<input type="number" min="100" step="100" value={settings.extension_words} onChange={e => {setSettings(v => ({...v,extension_words:e.target.value}));setSettingsDirty(true);}}/></label></div>
-            <div className="settings-actions"><span>Değişiklikler tüm kitap alanına yansır.</span><button className="button" disabled={settingsBusy || !settingsDirty}>{settingsBusy ? 'Kaydediliyor…' : 'Ayarları kaydet'}</button></div>
+            <div className="settings-numbers"><label>Kitap toplam kelime sınırı<input type="number" min="0" step="100" value={settings.target_words} onChange={e => {setSettings(v => ({...v,target_words:e.target.value}));setSettingsDirty(true);}}/><small>0 = kitap genelinde sınır yok</small></label><label>Ek kelime payı<input type="number" min="0" step="100" value={settings.extension_words} onChange={e => {setSettings(v => ({...v,extension_words:e.target.value}));setSettingsDirty(true);}}/><small>Kesin sınır = hedef + ek pay</small></label></div>
+            <div className="settings-actions"><span>Kitap sınırı, altındaki tüm hikâyelerin toplamına uygulanır. Hikâye ve bölüm sınırları ayrıca ayarlanır.</span><button className="button" disabled={settingsBusy || !settingsDirty}>{settingsBusy ? 'Kaydediliyor…' : 'Ayarları kaydet'}</button></div>
           </form>
         </section>}
         </>}

@@ -53,6 +53,14 @@ export default function App() {
   const target = book?.target_words || APP_CONFIG.INITIAL_WORD_TARGET;
   const ownsLock = lock?.user_id === userId && new Date(lock.expires_at) > new Date();
   const otherLock = lock?.user_id && lock.user_id !== userId && new Date(lock.expires_at) > new Date();
+  useEffect(() => {
+    if (!ownsLock) return;
+    const timer = window.setInterval(async () => {
+      const { error } = await supabase.rpc('renew_writing_lock');
+      if (error) setNotice(error.message);
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [ownsLock]);
 
   async function signIn(event) {
     event.preventDefault(); setBusy(true);

@@ -1169,8 +1169,6 @@ export default function App() {
             <label>BÖLÜM <select value={readerChapter?.id || ''} onChange={e=>{const index=readerChapters.findIndex(item=>item.id===e.target.value);setReadingIndex(Math.max(0,index));setReaderPageIndex(0);}}>{readerChapters.map((chapter,index)=><option key={chapter.id} value={chapter.id}>{String(index+1).padStart(2,'0')} · {chapter.title}{chapter.status==='published'?'':' · Çalışma nüshası'}</option>)}</select></label>
             <label>OKUMA DÜZENİ <select value={readerLayout} onChange={e=>{setReaderLayout(e.target.value);setReaderPageIndex(0);setReaderTurn(null);}}><option value="spread">Açık kitap · iki sayfa</option><option value="single">Tek sayfa</option><option value="scroll">Kesintisiz kaydırma</option></select></label>
             <div className="sentence-highlight-actions reader-highlight-actions">
-                         <button type="button" className="writer-history-button" aria-label="Son yazma işlemini geri al" title="Geri al" onMouseDown={e=>e.preventDefault()} onClick={()=>document.execCommand('undo')}>↶</button>
-                         <button type="button" className="writer-history-button" aria-label="Geri alınan işlemi yinele" title="Yinele" onMouseDown={e=>e.preventDefault()} onClick={()=>document.execCommand('redo')}>↷</button>
               <button type="button" className="sentence-highlight-button" disabled={!readerSelectedSentence} onMouseDown={e=>e.preventDefault()} onClick={addReaderSentenceHighlight}>↗ Cümlenin altını çiz</button>
               <span>{readerSelectedSentence ? 'Seçilen cümle hazır' : 'Önce bir cümle seç'}</span>
             </div>
@@ -1295,6 +1293,8 @@ export default function App() {
                       </div>
                       <div className="writer-layout-group"><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Word</button><button type="button" className={writingWidth === 'book' ? 'active' : ''} onClick={() => setWritingWidth('book')}>Kitap</button></div>
                       <div className="sentence-highlight-actions">
+                         <button type="button" className="writer-history-button" aria-label="Son yazma işlemini geri al" title="Geri al" onMouseDown={e=>e.preventDefault()} onClick={()=>document.execCommand('undo')}>↶</button>
+                         <button type="button" className="writer-history-button" aria-label="Geri alınan işlemi yinele" title="Yinele" onMouseDown={e=>e.preventDefault()} onClick={()=>document.execCommand('redo')}>↷</button>
                         <button type="button" className="sentence-highlight-button" disabled={!selectedSentence || !writingLock?.acquired} onMouseDown={e=>e.preventDefault()} onClick={addSentenceHighlight}>↗ Cümlenin altını çiz</button>
                         <span>{sentenceHighlights.length} cümle vurgusu</span>
                       </div>

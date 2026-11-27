@@ -1195,7 +1195,7 @@ export default function App() {
             </div>
             {isCompactReader && readerLayout === 'spread' && <small className="reader-responsive-note">Mobil ekranda rahat okuma için tek sayfa gösteriliyor.</small>}
           </div>
-          <div className={'reader-book reader-layout-' + effectiveReaderLayout} onClick={e=>{const p=e.target.closest('p');if(p&&e.currentTarget.contains(p)){const paragraphs=Array.from(e.currentTarget.querySelectorAll(':scope > p'));setSelectedWriterBlockIndex(paragraphs.indexOf(p));}}}
+          <div className={'reader-book reader-layout-' + effectiveReaderLayout}
                         onMouseUp={captureSentenceSelection} onTouchEnd={captureSentenceSelection}>
             <div className="reader-running-head"><span>{book?.title || 'Ortak Roman'}</span><span>{activeStory?.title || ''}</span></div>
             <section className="reader-frontmatter">
@@ -1333,7 +1333,7 @@ export default function App() {
                           <h3>{!writingPresenceReady && !focusMode ? 'Yazma durumu kontrol ediliyor…' : (writingLock?.display_name || activeWritingLocks[activeChapterId]?.display_name || 'Bir yazar') + ' şu anda yazıyor.'}</h3>
                           <p>Bu bölümün metni yazım tamamlanıp kaydedilene kadar diğer yazarlara gösterilmez.</p>
                           <span className="private-writing-lock">▣ Bölüm geçici olarak kilitli</span>
-                        </div> : !focusMode ? <div className="chapter-read-preview"><span className="eyebrow">OKUMA ÖNİZLEMESİ</span>{editorBlocks.length ? editorBlocks.map((block,index)=><p key={block.id || 'preview-'+index}>{block.content}</p>) : <p className="chapter-preview-empty">Bu bölümde henüz kaydedilmiş metin yok. Yazmaya başlamak için “Odak modunda yaz” seçeneğini kullan.</p>}</div> : <div className="writer-paragraph-tools" role="toolbar" aria-label="Paragraf düzenleme">
+                        </div> : !focusMode ? <div className="chapter-read-preview"><span className="eyebrow">OKUMA ÖNİZLEMESİ</span>{editorBlocks.length ? editorBlocks.map((block,index)=><p key={block.id || 'preview-'+index}>{block.content}</p>) : <p className="chapter-preview-empty">Bu bölümde henüz kaydedilmiş metin yok. Yazmaya başlamak için “Odak modunda yaz” seçeneğini kullan.</p>}</div> : <><div className="writer-paragraph-tools" role="toolbar" aria-label="Paragraf düzenleme">
                         <span>Paragraf işlemleri</span>
                         <button type="button" disabled={!writingLock?.acquired} onMouseDown={e=>e.preventDefault()} onClick={()=>applyWriterParagraphAction('add')}>＋ Paragraf ekle</button>
                         <button type="button" disabled={!writingLock?.acquired || selectedWriterBlockIndex<0 || editorBlocks[selectedWriterBlockIndex]?.author_id!==userId} onMouseDown={e=>e.preventDefault()} onClick={()=>applyWriterParagraphAction('up')} aria-label="Paragrafı yukarı taşı">↑</button>
@@ -1351,13 +1351,14 @@ export default function App() {
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
                         style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'Literata', 'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
                         onInput={e=>{const nodes=readWriterCanvasBlocks(e.currentTarget,userId,editorBlocks);setEditorBlocks(nodes);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
+                        onClick={e=>{const p=e.target.closest('p');if(p&&e.currentTarget.contains(p)){const paragraphs=Array.from(e.currentTarget.querySelectorAll(':scope > p'));setSelectedWriterBlockIndex(paragraphs.indexOf(p));}}}
                          onPaste={e=>{e.preventDefault();const plainText=normalizeWriterPaste(e.clipboardData?.getData('text/plain')||'');if(plainText)document.execCommand('insertText',false,plainText);}}
                         onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();e.currentTarget.closest('form')?.requestSubmit();}}}
                         onMouseUp={captureSentenceSelection}
                         onKeyUp={captureSentenceSelection}
                       >
                         {editorBlocks.map((block,index)=><p key={block.id || 'legacy-'+index} data-block-id={block.id || ''} contentEditable={Boolean(writingLock?.acquired && (!block.id || block.author_id === userId))} suppressContentEditableWarning className={block.id && block.author_id !== userId ? 'writer-protected-block' : ''} title={block.id && block.author_id !== userId ? (block.author_name || 'Başka bir yazar') + ' tarafından yazıldı · Bu paragraf korunuyor' : undefined}>{block.content ? renderHighlightedText(block.content, block.id, sentenceHighlights) : <br/>}</p>)}<p className="writer-new-block" data-new-block="true" contentEditable={Boolean(writingLock?.acquired)} suppressContentEditableWarning data-placeholder="Yeni paragrafını buraya yaz…"><br/></p>
-                      </div>}
+                      </div></>}
                     </div>
                     <p className="editor-save-help"><span className="writer-paste-note">Dışarıdan yapıştırılan metin, kitabın yazı düzenini korumak için biçimsiz eklenir. </span>Otomatik taslak yalnızca senin için saklanır. Diğer yazarların da Kitabı oku alanında görebilmesi için <strong>Kaydet ve okumada göster</strong> düğmesine bas. Taslak durumundaki metin yalnızca hikâye üyelerine görünür.</p><div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || chapterOverLimit || storyOverLimit || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Kaydet ve okumada göster'}</button></div>
                     {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>

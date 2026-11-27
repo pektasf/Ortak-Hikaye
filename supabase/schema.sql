@@ -1151,7 +1151,7 @@ create policy "Members can write chapter blocks" on public.chapter_blocks for al
 insert into public.chapter_blocks(chapter_id,position,content,author_id,updated_by)
 select c.id, row_number() over(partition by c.id order by p.ordinality)-1, p.content, null, null
 from public.chapters c
-cross join lateral regexp_split_to_table(c.content,E'\\n[[:space:]]*\\n') with ordinality as p(content,ordinality)
+cross join lateral regexp_split_to_table(c.content,E'\n[[:space:]]*\n') with ordinality as p(content,ordinality)
 where btrim(p.content)<>''
 and not exists(select 1 from public.chapter_blocks b where b.chapter_id=c.id);
 create or replace function public.save_chapter_blocks(p_chapter_id uuid,p_title text,p_status text,p_blocks jsonb)

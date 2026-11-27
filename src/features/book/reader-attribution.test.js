@@ -83,3 +83,24 @@ test('writers can edit their own paragraphs while protected paragraphs remain in
   const candidate = [original[0], { ...original[1], content: 'Yeni metin.' }];
   assert.deepEqual(validateWriterBlockOwnership(candidate, original, 'writer-b'), { valid: true, message: '' });
 });
+
+
+import { mergeProtectedBlocksForDraft } from './writer-blocks.js';
+test('draft snapshots retain protected paragraphs omitted from editor DOM', () => {
+  const original = [
+    { id: 'other-a', content: 'Başkasının metni.', author_id: 'writer-a' },
+    { id: 'mine', content: 'Benim metnim.', author_id: 'writer-b' },
+    { id: 'legacy', content: 'Eski metin.', author_id: null }
+  ];
+  const draft = mergeProtectedBlocksForDraft([{ id: 'mine', content: 'Yeni metnim.' }], original, 'writer-b');
+  assert.equal(draft.find(item => item.id === 'other-a').content, 'Başkasının metni.');
+  assert.equal(draft.find(item => item.id === 'legacy').content, 'Eski metin.');
+  assert.equal(draft.find(item => item.id === 'mine').content, 'Yeni metnim.');
+});
+test('editing own paragraph updates last-editor attribution', () => {
+  const paragraph = { nodeType: 1, getAttribute: name => name === 'data-block-id' ? 'mine' : null, innerText: 'Güncel metin.' };
+  const blocks = readWriterCanvasBlocks({ childNodes: [paragraph] }, 'writer-b', [
+    { id: 'mine', content: 'Eski metin.', author_id: 'writer-b', updated_by: 'writer-a' }
+  ]);
+  assert.equal(blocks[0].updated_by, 'writer-b');
+});

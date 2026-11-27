@@ -120,6 +120,7 @@ export default function App() {
   const [editorContent, setEditorContent] = useState('');
   const [editorBlocks, setEditorBlocks] = useState([]);
   const [sentenceHighlights, setSentenceHighlights] = useState([]);
+  const [readerParagraphBlocks, setReaderParagraphBlocks] = useState([]);
   const [selectedSentence, setSelectedSentence] = useState(null);
   const [editorStatus, setEditorStatus] = useState('draft');
   const [editorDirty, setEditorDirty] = useState(false);
@@ -280,6 +281,23 @@ export default function App() {
   useEffect(() => {
     if (view !== 'reader' || !readerChapter?.id) return;
     let alive = true;
+    setReaderParagraphBlocks([]);
+    Promise.all([
+      supabase.from('chapter_blocks').select('id,content,author_id,position').eq('chapter_id', readerChapter.id).order('position'),
+      supabase.rpc('get_story_author_names', { p_chapter_id: readerChapter.id })
+    ]).then(([{ data: blocks, error: blocksError }, { data: authors, error: authorsError }]) => {
+      if (!alive) return;
+      if (blocksError || authorsError) {
+        setReaderParagraphBlocks([]);
+        setNotice('Paragraf yazarları yüklenemedi: ' + (blocksError || authorsError).message);
+        return;
+      }
+      const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name]));
+      setReaderParagraphBlocks((blocks || []).map(block => ({
+        content: String(block.content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').trim(),
+        author_name: names[block.author_id] || (block.author_id ? 'Yazar' : 'Yazar bilgisi yok')
+      })));
+    });
     supabase.from('chapter_sentence_highlights')
       .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
       .eq('chapter_id', readerChapter.id)
@@ -1039,16 +1057,16 @@ export default function App() {
             </section>
             {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Henüz okunabilir kayıtlı metin yok.</h2><p>Yazarlar metinlerini kaydettikçe yayın öncesinde de burada birlikte okuyabilirsiniz.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
               <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')} · {readerChapter.status==='published'?'YAYINDA':'ÇALIŞMA NÜSHASI · YAYINLANMADI'}</span><h1>{readerChapter.title}</h1>
-              <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>)}</div>
+              <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;return <p key={index} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
             </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
               <article className="reader-page-sheet page-left">
                 <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}{readerChapter.status!=='published'?' · ÇALIŞMA NÜSHASI':''}</span>
-                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
+                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;return <p key={index} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
                 <span className="reader-page-number">{readerPageIndex+1}</span>
               </article>
               <article className="reader-page-sheet page-right">
                 <span className="reader-page-kicker">{readerChapter.title}</span>
-                <div className="reader-page-prose">{(readerPages[readerPageIndex+1] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
+                <div className="reader-page-prose">{(readerPages[readerPageIndex+1] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;return <p key={index} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
                 <span className="reader-page-number">{Math.min(readerPageIndex+2,readerPages.length)}</span>
               </article>
               {readerTurn && <div className={'page-flip-overlay ' + readerTurn}><div className="page-flip-front"><span>{readerChapter.title}</span><p>{(readerPages[readerTurn==='forward'?readerPageIndex+1:readerPageIndex] || '').slice(0,450)}</p></div><div className="page-flip-back"></div></div>}

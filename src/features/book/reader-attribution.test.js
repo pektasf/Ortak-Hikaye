@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findReaderAuthorBlock, getReaderParagraphCredits, normalizeReaderText } from './reader-attribution.js';
+import { findReaderAuthorBlock, findReaderParagraphOffset, getReaderParagraphCredits, normalizeReaderText } from './reader-attribution.js';
 
 test('normalizes line breaks, non-breaking spaces and repeated whitespace', () => {
   assert.equal(normalizeReaderText('  İlk\u00a0 satır\n\n ikinci   satır  '), 'İlk satır ikinci satır');
@@ -24,4 +24,13 @@ test('shows original author and a different last editor without confusing their 
 test('does not invent an original author for legacy blocks', () => {
   const blocks = [{ content: 'Eski paragraf.', author_id: null, updated_by: null }];
   assert.equal(getReaderParagraphCredits('Eski paragraf.', blocks), null);
+});
+test('maps a page fragment offset back to the original paragraph, including line breaks', () => {
+  const source = 'Birinci cümle.\n   İkinci cümle. Üçüncü cümle.';
+  assert.equal(findReaderParagraphOffset('İkinci cümle.', source), source.indexOf('İkinci'));
+});
+
+test('uses the exact source offset when a page fragment is unchanged', () => {
+  const source = 'Başlangıç. Devam eden cümle.';
+  assert.equal(findReaderParagraphOffset('Devam eden cümle.', source), source.indexOf('Devam'));
 });

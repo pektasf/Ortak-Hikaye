@@ -27,6 +27,27 @@ function renderHighlightedText(content, blockId, highlights) {
   return nodes;
 }
 
+function renderReaderHighlightedText(content, highlights) {
+  const text = String(content || '');
+  const matches = (highlights || [])
+    .map(item => item.sentence_text)
+    .filter(Boolean)
+    .map(sentence => ({ sentence, start: text.indexOf(sentence) }))
+    .filter(item => item.start >= 0)
+    .sort((a, b) => a.start - b.start);
+  if (!matches.length) return text;
+  const nodes = [];
+  let cursor = 0;
+  matches.forEach((item, index) => {
+    if (item.start < cursor) return;
+    if (item.start > cursor) nodes.push(text.slice(cursor, item.start));
+    nodes.push(<span className="sentence-highlight" key={item.start + '-' + index} title="Altı çizili cümle">{item.sentence}</span>);
+    cursor = item.start + item.sentence.length;
+  });
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes;
+}
+
 function readWriterCanvasBlocks(root, userId) {
   if (!root) return [];
   const nodes = Array.from(root.childNodes || []);
@@ -253,6 +274,21 @@ export default function App() {
     setSelectedSentence(null);
     return blocks;
   }
+
+  useEffect(() => {
+    if (view !== 'reader' || !readerChapter?.id) return;
+    let alive = true;
+    supabase.from('chapter_sentence_highlights')
+      .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
+      .eq('chapter_id', readerChapter.id)
+      .order('created_at', { ascending: true })
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) setNotice('Cümle altı çizgileri yüklenemedi: ' + error.message);
+        else setSentenceHighlights(data || []);
+      });
+    return () => { alive = false; };
+  }, [view, readerChapter?.id]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1001,7 +1037,7 @@ export default function App() {
             </section>
             {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Henüz okunabilir kayıtlı metin yok.</h2><p>Yazarlar metinlerini kaydettikçe yayın öncesinde de burada birlikte okuyabilirsiniz.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
               <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')} · {readerChapter.status==='published'?'YAYINDA':'ÇALIŞMA NÜSHASI · YAYINLANMADI'}</span><h1>{readerChapter.title}</h1>
-              <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
+              <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>)}</div>
             </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
               <article className="reader-page-sheet page-left">
                 <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}{readerChapter.status!=='published'?' · ÇALIŞMA NÜSHASI':''}</span>

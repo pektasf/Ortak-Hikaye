@@ -7,7 +7,7 @@
 - Site adresi: https://pektasf.github.io/Ortak-Hikaye/
 
 ## GitHub tarafı
-1. Repository Settings → Pages → Build and deployment → Source: **GitHub Actions**.
+1. Repository Settings → Pages → Build and deployment → Source: **GitHub Actions**. İlk etkinleştirmeyi GitHub arayüzünden yapın; bağlı GitHub uygulamasının Pages sitesini ilk kez oluşturma yönetim izni bulunmuyor.
 2. Actions sekmesinde workflow çalışmasını izleyin.
 3. Başarılı yayın sonrası Pages URL'si açılır.
 
@@ -27,7 +27,7 @@
 Anon key frontend'de kullanılmak üzere tasarlanmıştır. **service_role key'i GitHub secret'a veya frontend'e eklemeyin.**
 
 ## İlk sahip hesabı ve davetler
-1. Site açıldıktan sonra ilk sahip olarak kendi e-posta adresinizle giriş bağlantısı isteyin.
+1. Site açıldıktan sonra ilk sahip hesabını oluşturmak için şu kurulum bağlantısını açın: `https://pektasf.github.io/Ortak-Hikaye/?setup=1`. Kendi e-posta adresinizle giriş bağlantısı isteyin.
 2. İlk girişte profil erişimsiz oluşturulur. Supabase SQL Editor'de şu sorguyu kendi e-posta adresinizle çalıştırın:
 
 ```sql

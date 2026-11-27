@@ -439,9 +439,23 @@ export default function App() {
     event.preventDefault();
     if (!activeChapter || !editorTitle.trim()) return;
     setBusy(true);
+    const richCanvas = document.querySelector('.writer-rich-canvas');
+    let blocksToSave = editorBlocks.map(block => ({ id: block.id || null, content: block.content }));
+    if (richCanvas) {
+      const usedIds = new Set();
+      blocksToSave = Array.from(richCanvas.children).map(node => {
+        const rawId = node.getAttribute('data-block-id');
+        const id = rawId && !usedIds.has(rawId) ? rawId : null;
+        if (id) usedIds.add(id);
+        return {
+          id,
+          content: String(node.innerText || node.textContent || '').replace(/\\r/g, '').replace(/\\u00a0/g, ' ').trimEnd()
+        };
+      }).filter(block => block.content.trim());
+    }
     const { error } = await supabase.rpc('save_chapter_blocks', {
       p_chapter_id: activeChapter.id, p_title: editorTitle.trim(), p_status: editorStatus,
-      p_blocks: editorBlocks.map(block => ({ id: block.id || null, content: block.content }))
+      p_blocks: blocksToSave
     });
     const { data } = error ? { data: null } : await supabase.from('chapters').select('*').eq('id', activeChapter.id).single();
     if (error) setNotice('Bölüm kaydedilemedi: ' + error.message);
@@ -751,26 +765,30 @@ export default function App() {
                     {chapterOverLimit && <div className="word-limit-warning">Bölüm kelime sınırını aştın. Kaydedebilmek için {Math.max(0,words(editorContent)-chapterWordLimit)} kelime azalt veya bölüm hedefini yükselt.</div>}
                     {writingLock && <div className={'writing-presence ' + (writingLock.acquired ? 'is-self' : 'is-other')}><span className="writing-pencil">✎</span>{writingLock.acquired ? 'Şu anda bu bölümü sen yazıyorsun. Sıra sende.' : (writingLock.display_name || 'Bir yazar') + ' şu anda yazıyor · Bu bölüm geçici olarak kilitli.'}</div>}
                     <div className={'chapter-blocks-editor' + (focusMode ? ' document-page-canvas' : '')} aria-label="Paragraf yazma alanı">
-                      {editorBlocks.map((block, index) => <div className="chapter-block" key={block.id || 'new-' + index}>
-                        <textarea
-                          className="chapter-content-input chapter-block-input"
-                          disabled={!writingLock?.acquired}
-                          rows={Math.max(3, block.content.split('\n').reduce((total,line)=>total+Math.max(1,Math.ceil(line.length/72)),0))}
-                          style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
-                          value={block.content}
-                          onChange={e => {
-                            const next = editorBlocks.map((item, i) => i === index ? {...item,content:e.target.value} : item);
-                            setEditorBlocks(next); setEditorContent(next.map(item => item.content).join('\n\n')); setEditorDirty(true);
-                          }}
-                          placeholder={index === 0 ? 'Hikâyenin ilk cümlesini yaz…' : 'Devam et…'}
-                          aria-label={'Paragraf ' + (index + 1)}
-                        />
-                        <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id === userId ? 'İlk yazar: Sen' : 'İlk yazar: ' + block.author_name) : 'Eski metin · İlk yazarı bilinmiyor'}{block.updated_by && block.updated_by !== block.author_id ? ' · Son düzenleyen: ' + (block.updated_by === userId ? 'Sen' : block.editor_name) : ''} · {words(block.content)} kelime</span>
-                          <button type="button" className="text-button danger" disabled={!writingLock?.acquired} onClick={() => {const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item => item.content).join('\n\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
-                        </div>
-                      </div>)}
-                      <button type="button" className="add-paragraph-button" disabled={!writingLock?.acquired} onClick={() => {setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yazmaya devam et</button>
-                      {!editorBlocks.length && <button type="button" className="document-first-line" disabled={!writingLock?.acquired} onClick={()=>{setEditorBlocks([{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>Buraya tıklayıp yazmaya başla…</button>}
+                      {focusMode ? <div
+                        className="writer-rich-canvas"
+                        contentEditable={Boolean(writingLock?.acquired)}
+                        suppressContentEditableWarning
+                        role="textbox"
+                        aria-label="Hikâye metni"
+                        aria-multiline="true"
+                        data-placeholder="Hikâyenin ilk cümlesini yaz…"
+                        style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
+                        onInput={e=>{setEditorContent(e.currentTarget.innerText.replace(/\\r/g,'').replace(/\\u00a0/g,' '));setEditorDirty(true);}}
+                      >
+                        {editorBlocks.map((block,index)=><p key={block.id || 'legacy-'+index} data-block-id={block.id || ''}>{block.content || <br/>}</p>)}
+                      </div> : <>
+                        {editorBlocks.map((block,index)=><div className="chapter-block" key={block.id || 'new-'+index}>
+                          <textarea className="chapter-content-input chapter-block-input" disabled={!writingLock?.acquired} rows={Math.max(3,block.content.split('\n').length)} value={block.content} onChange={e=>{
+                            const next=editorBlocks.map((item,i)=>i===index?{...item,content:e.target.value}:item);
+                            setEditorBlocks(next);setEditorContent(next.map(item=>item.content).join('\n\n'));setEditorDirty(true);
+                          }} placeholder="Paragrafını buraya yaz…" aria-label={'Paragraf '+(index+1)}/>
+                          <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id===userId?'İlk yazar: Sen':'İlk yazar: '+block.author_name) : 'Eski metin · İlk yazarı bilinmiyor'}{block.updated_by && block.updated_by!==block.author_id?' · Son düzenleyen: '+(block.updated_by===userId?'Sen':block.editor_name):''} · {words(block.content)} kelime</span>
+                            <button type="button" className="text-button danger" disabled={!writingLock?.acquired} onClick={()=>{const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item=>item.content).join('\n\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
+                          </div>
+                        </div>)}
+                        <button type="button" className="add-paragraph-button" disabled={!writingLock?.acquired} onClick={()=>{setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yeni paragraf ekle</button>
+                      </>}
                     </div>
                     <div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || chapterOverLimit || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Değişiklikleri kaydet'}</button></div>
                     {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>

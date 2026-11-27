@@ -34,10 +34,16 @@ export default function App() {
   const [showRevisions, setShowRevisions] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [writingWidth, setWritingWidth] = useState('notebook');
-  const [view, setView] = useState('workspace');
   const [profile, setProfile] = useState(null);
   const [profileForm, setProfileForm] = useState({ display_name: '', bio: '' });
   const [profileBusy, setProfileBusy] = useState(false);
+  const [discoverAuthors, setDiscoverAuthors] = useState([]);
+  const [authorQuery, setAuthorQuery] = useState('');
+  const [publicProfileId, setPublicProfileId] = useState(null);
+  const [readingIndex, setReadingIndex] = useState(0);
+  const [writingLock, setWritingLock] = useState(null);
+  const [lockNotice, setLockNotice] = useState('');
+  const [view, setView] = useState('home');
 
   const userId = session?.user?.id;
   const activeStory = stories.find(item => item.id === activeStoryId) || null;
@@ -107,7 +113,7 @@ export default function App() {
     if (!supabase || !session || !authorized) return;
     const [bookResult, storyResult] = await Promise.all([
       supabase.from('books').select('*').limit(1).maybeSingle(),
-      supabase.from('stories').select('id,title,description,status,owner_id,created_at,updated_at').order('updated_at', { ascending: false })
+      supabase.from('stories').select('id,title,description,status,owner_id,target_words,created_at,updated_at').order('updated_at', { ascending: false })
     ]);
     if (bookResult.error) setNotice('Kitap bilgisi yüklenemedi: ' + bookResult.error.message);
     else if (bookResult.data) setBook(bookResult.data);
@@ -121,7 +127,7 @@ export default function App() {
   async function refreshChapters(storyId = activeStoryId) {
     if (!supabase || !storyId) { setChapters([]); return; }
     const { data, error } = await supabase.from('chapters')
-      .select('id,story_id,title,content,status,sort_order,created_by,created_at,updated_at')
+      .select('id,story_id,title,content,status,target_words,sort_order,created_by,created_at,updated_at')
       .eq('story_id', storyId).order('sort_order').order('created_at');
     if (error) setNotice('Bölümler yüklenemedi: ' + error.message);
     else {
@@ -166,6 +172,42 @@ export default function App() {
       if (error) setNotice('Okuma konumu kaydedilemedi: ' + error.message);
     });
   }, [activeChapterId, activeStoryId, authorized, userId, chapters]);
+
+  useEffect(() => {
+    if (!authorized || !activeChapterId || !userId) { setWritingLock(null); return; }
+    let alive = true;
+    let timer;
+    let ownsLock = false;
+    const acquire = async () => {
+      const { data, error } = await supabase.rpc('acquire_chapter_writing_lock', { p_chapter_id: activeChapterId });
+      if (!alive) return;
+      if (error) { setWritingLock({ acquired:false, display_name:'Başka bir yazar', error:error.message }); return; }
+      ownsLock = Boolean(data?.acquired && data.user_id === userId);
+      setWritingLock(data);
+      setLockNotice(data?.acquired ? '' : (data?.display_name || 'Bir yazar') + ' şu anda bu bölümü yazıyor.');
+    };
+    acquire();
+    timer = window.setInterval(async () => {
+      if (!alive) return;
+      if (ownsLock) {
+        const { data, error } = await supabase.rpc('renew_chapter_writing_lock', { p_chapter_id: activeChapterId });
+        if (error || data !== true) { ownsLock=false; setWritingLock({ acquired:false, display_name:'Yazma oturumu sona erdi' }); }
+      } else acquire();
+    }, 12000);
+    const channel = supabase.channel('chapter-lock-' + activeChapterId)
+      .on('postgres_changes', { event:'*', schema:'public', table:'chapter_writing_locks', filter:'chapter_id=eq.' + activeChapterId }, () => acquire())
+      .subscribe();
+    return () => {
+      alive=false;
+      window.clearInterval(timer);
+      supabase.removeChannel(channel);
+      if (ownsLock) supabase.rpc('release_chapter_writing_lock', { p_chapter_id: activeChapterId });
+    };
+  }, [authorized, activeChapterId, userId]);
+
+  useEffect(() => {
+    if (view === 'discover') loadDiscover('');
+  }, [view]);
 
   useEffect(() => {
     if (!focusMode) return;
@@ -242,17 +284,36 @@ export default function App() {
     setStoryBusy(false);
   }
 
-  async function openProfile() {
+  async function openProfile(targetId = userId) {
     if (editorDirty && !window.confirm('Kaydedilmemiş bölüm değişikliklerin var. Profil sayfasına geçmek istiyor musun?')) return;
     setProfileBusy(true);
-    const { data, error } = await supabase.rpc('get_author_profile', { p_user_id: userId });
+    const { data, error } = await supabase.rpc('get_author_profile', { p_user_id: targetId });
     if (error) setNotice('Profil yüklenemedi: ' + error.message);
     else {
       setProfile(data);
+      setPublicProfileId(targetId);
       setProfileForm({ display_name: data.display_name || '', bio: data.bio || '' });
       setView('profile');
     }
     setProfileBusy(false);
+  }
+
+  async function loadDiscover(query = authorQuery) {
+    const { data, error } = await supabase.rpc('search_author_profiles', { p_query: query, p_limit: 36 });
+    if (error) setNotice('Yazarlar yüklenemedi: ' + error.message);
+    else setDiscoverAuthors(data || []);
+  }
+
+  async function toggleFollow(targetId, currentlyFollowing) {
+    if (!targetId || targetId === userId) return;
+    const result = currentlyFollowing
+      ? await supabase.from('author_follows').delete().eq('follower_id', userId).eq('followed_id', targetId)
+      : await supabase.from('author_follows').insert({ follower_id: userId, followed_id: targetId });
+    if (result.error) setNotice('Takip işlemi yapılamadı: ' + result.error.message);
+    else {
+      if (publicProfileId === targetId) await openProfile(targetId);
+      await loadDiscover();
+    }
   }
 
   async function saveProfile(event) {
@@ -443,7 +504,7 @@ export default function App() {
   return <div className="app-shell">
     <header className="topbar">
       <a className="brand" href={window.location.pathname}>✦ ORTAK <b>ROMAN</b></a>
-      {session ? <div className="account"><span>{session.user.email}</span><button className="button light profile-nav-button" disabled={profileBusy} onClick={openProfile}>{profileBusy ? 'Açılıyor…' : 'Profilim'}</button><button className="button light" onClick={() => supabase.auth.signOut()}>Çıkış</button></div> : <span className="eyebrow">DAVETLİ YAZARLAR</span>}
+      {session ? <div className="account"><button className="text-button" onClick={()=>setView('home')}>Ana sayfa</button><button className="text-button" onClick={()=>setView('discover')}>Yazarları keşfet</button><button className="button light profile-nav-button" disabled={profileBusy} onClick={openProfile}>{profileBusy ? 'Açılıyor…' : 'Profilim'}</button><button className="button light" onClick={() => supabase.auth.signOut()}>Çıkış</button></div> : <span className="eyebrow">DAVETLİ YAZARLAR</span>}
     </header>
     <main className={session ? 'content workspace-content' : 'content login-content'}>
       {!session ? <div className="login-layout">
@@ -474,7 +535,7 @@ export default function App() {
       </div> : <>
         {view === 'profile' ? <section className="profile-page">
           <div className="profile-page-heading"><button className="text-button" onClick={() => setView('workspace')}>← Çalışma alanına dön</button><span className="eyebrow">ORTAK ROMAN · YAZAR KARTI</span></div>
-          <div className="profile-hero"><div className="profile-avatar">{(profile?.display_name || 'Y').slice(0,1).toLocaleUpperCase('tr-TR')}</div><div><span className="eyebrow">YAZAR</span><h1>{profile?.display_name || 'Yazar'}</h1>{profile?.bio && <p className="profile-bio">{profile.bio}</p>}<p>Katılım: {profile?.member_since ? new Date(profile.member_since).toLocaleDateString('tr-TR',{year:'numeric',month:'long'}) : 'Yeni yazar'}</p></div></div>
+          <div className="profile-hero"><div className="profile-avatar">{(profile?.display_name || 'Y').slice(0,1).toLocaleUpperCase('tr-TR')}</div><div className="profile-identity"><span className="eyebrow">YAZAR · TOPLULUK PROFİLİ</span><h1>{profile?.display_name || 'Yazar'}</h1>{profile?.bio && <p className="profile-bio">{profile.bio}</p>}<p>Katılım: {profile?.member_since ? new Date(profile.member_since).toLocaleDateString('tr-TR',{year:'numeric',month:'long'}) : 'Yeni yazar'}</p><div className="profile-social-counts"><span><b>{profile?.followers_count ?? 0}</b> takipçi</span><span><b>{profile?.following_count ?? 0}</b> takip</span></div></div>{publicProfileId !== userId && <button className="button profile-follow-button" onClick={() => toggleFollow(publicProfileId,profile?.is_following)}>{profile?.is_following ? 'Takibi bırak' : '+ Takip et'}</button>}</div>
           <div className="profile-stats-grid">
             <article><strong>{profile?.stats?.stories_created ?? 0}</strong><span>Hikâye başlattı</span></article>
             <article><strong>{profile?.stats?.stories_joined ?? 0}</strong><span>Hikâyeye katıldı</span></article>
@@ -488,12 +549,24 @@ export default function App() {
             <article className="profile-stat-upcoming"><strong>Yakında</strong><span>Altı çizilen cümleler</span></article>
           </div>
           <p className="profile-stat-note">Kelime sayısı, ilk yazarı olduğun paragrafların güncel metninden hesaplanır; paragrafı sonradan düzenleyen kişinin eklediği veya çıkardığı kelimeler ayrı hesaplanmaz. Eski metinlerin yazarı bilinmediği için katkı istatistiklerine dahil edilmez. Cümle vurguları henüz kullanıma açılmadı.</p>
-          <form className="profile-edit-card" onSubmit={saveProfile}>
+          {publicProfileId === userId && <form className="profile-edit-card" onSubmit={saveProfile}>
             <div><span className="eyebrow">KİŞİSEL ALAN</span><h2>Profilini düzenle</h2><p>Diğer hikâye üyeleri adını ve kısa tanıtımını görebilir.</p></div>
             <label>Görünen ad<input required minLength={2} maxLength={40} value={profileForm.display_name} onChange={e => setProfileForm(v => ({...v,display_name:e.target.value}))}/></label>
             <label>Hakkımda<textarea rows={4} maxLength={500} value={profileForm.bio} onChange={e => setProfileForm(v => ({...v,bio:e.target.value}))} placeholder="Kendinden ve yazmayı sevdiğin hikâyelerden bahset…"/></label>
             <div className="profile-edit-footer"><span>{profileForm.bio.length}/500</span><button className="button" disabled={profileBusy || !profileForm.display_name.trim()}>{profileBusy ? 'Kaydediliyor…' : 'Profili kaydet'}</button></div>
-          </form>
+          </form>}
+        </section> : view === 'discover' ? <section className="discover-page">
+          <div className="discover-heading"><span className="eyebrow">ORTAK ROMAN TOPLULUĞU</span><h1>Yazarları keşfet.</h1><p>Yeni sesler bul, yazarları takip et ve birlikte yazacağın insanlarla tanış.</p><input value={authorQuery} onChange={e => {setAuthorQuery(e.target.value);loadDiscover(e.target.value);}} placeholder="Yazar veya ilgi alanı ara…" aria-label="Yazar ara"/></div>
+          <div className="discover-grid">{discoverAuthors.map(author => <article className="author-card" key={author.id}><button className="author-card-main" onClick={() => openProfile(author.id)}><span className="profile-avatar">{(author.display_name || 'Y').slice(0,1).toLocaleUpperCase('tr-TR')}</span><strong>{author.display_name}</strong><p>{author.bio || 'Henüz kendini tanıtmadı.'}</p><small>{author.followers_count} takipçi · {author.following_count} takip</small></button><div className="author-card-actions"><button className="button light" onClick={() => openProfile(author.id)}>Profili gör</button><button className="button" onClick={() => toggleFollow(author.id,author.is_following)}>{author.is_following ? 'Takibi bırak' : 'Takip et'}</button></div></article>)}</div>
+          {!discoverAuthors.length && <div className="chapter-empty"><span>✦</span><h2>Henüz eşleşen yazar yok.</h2><p>Başka bir isimle ara veya topluluğa yeni yazarlar davet et.</p></div>}
+        </section> : view === 'reader' ? <section className="reader-page">
+          <div className="reader-topline"><button className="text-button" onClick={() => setView('workspace')}>← Çalışma alanı</button><span className="eyebrow">ORTAK ROMAN · OKUMA MODU</span><button className="text-button" onClick={() => setView('home')}>Kitaplığıma dön</button></div>
+          <div className="reader-book"><div className="reader-running-head">{book?.title || 'Ortak Roman'} <span>{activeStory?.title || ''}</span></div><div className="reader-page-content"><span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')}</span><h1>{chapters.filter(c=>c.status==='published')[readingIndex]?.title || 'Henüz yayınlanmış bölüm yok'}</h1><div className="reader-prose">{(chapters.filter(c=>c.status==='published')[readingIndex]?.content || '').split(/\n\s*\n/).filter(Boolean).map((p,i)=><p key={i}>{p}</p>)}</div></div><div className="reader-controls"><button className="button light" disabled={readingIndex===0} onClick={()=>setReadingIndex(i=>Math.max(0,i-1))}>← Önceki</button><span>{Math.min(readingIndex+1,chapters.filter(c=>c.status==='published').length)} / {chapters.filter(c=>c.status==='published').length}</span><button className="button" disabled={readingIndex>=chapters.filter(c=>c.status==='published').length-1} onClick={()=>setReadingIndex(i=>i+1)}>Sonraki →</button></div></div>
+        </section> : view === 'home' ? <section className="home-page">
+          <div className="home-welcome"><div><span className="eyebrow">KİTAPLIĞIN · YAZAR TOPLULUĞU</span><h1>Her kitabın<br/><em>bir başlangıcı</em> vardır.</h1><p>Bir hikâyeyi tek başına başlatabilir, başka yazarlarla birlikte büyütebilirsin.</p><div className="home-actions"><button className="button" onClick={()=>setView('workspace')}>Yazmaya devam et <span>→</span></button><button className="button light" onClick={()=>setView('reader')}>Kitabı oku</button></div></div><div className="home-book-object"><div className="home-book-spine"></div><div className="home-book-cover"><small>ORTAK ROMAN</small><span>✦</span><strong>{book?.title || 'Bir hikâye, birçok ses'}</strong><i>Birlikte yazılan hikâyeler</i></div></div></div>
+          <div className="home-section-head"><div><span className="eyebrow">SENİN KÜTÜPHANEN</span><h2>Hikâyelerine dön</h2></div><button className="text-button" onClick={()=>setView('workspace')}>Tüm hikâyeler →</button></div>
+          <div className="home-story-grid">{stories.slice(0,3).map((story,i)=><button className={'home-story-card cover-tone-'+i} key={story.id} onClick={()=>{setActiveStoryId(story.id);setView('workspace');}}><span>✦</span><strong>{story.title}</strong><small>{story.description || 'Birlikte yazılmayı bekleyen bir hikâye'}</small></button>)}{!stories.length&&<p className="empty-small">Henüz hikâyen yok. Çalışma alanından ilk hikâyeni oluştur.</p>}</div>
+          <div className="home-community-strip"><div><span className="eyebrow">YAZAR TOPLULUĞU</span><h2>Yeni bir ses keşfet.</h2><p>Yazarları bul, takip et ve hikâyelerine davet et.</p></div><button className="button" onClick={()=>setView('discover')}>Yazarları keşfet →</button></div>
         </section> : <>
         <section className="workspace-heading">
           <div><span className="eyebrow">YAZAR ÇALIŞMA ALANI</span><h1>{book?.title || 'Ortak Roman'}</h1><p>{book?.subtitle || 'Bir hikâye, birçok ses'}</p></div>
@@ -529,9 +602,10 @@ export default function App() {
             {activeStory ? <>
               <div className="story-heading">
                 <div><span className="eyebrow">SEÇİLİ HİKÂYE</span><h2>{activeStory.title}</h2><p>{activeStory.description || 'Bu hikâyenin dünyası henüz tanımlanmadı.'}</p></div>
-                <div className="story-heading-actions"><span className={'status-pill ' + activeStory.status}>{activeStory.status === 'published' ? 'Yayında' : activeStory.status === 'archived' ? 'Arşiv' : 'Taslak'}</span><button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(activeStory.id)}>Davet bağlantısı</button>{isStoryOwner && <button className="button light danger-button" disabled={storyBusy} onClick={deleteStory}>Hikâyeyi sil</button>}</div>
+                <div className="story-heading-actions"><span className="story-word-meter">{chapters.reduce((n,c)=>n+words(c.content||''),0).toLocaleString('tr-TR')} / {(activeStory.target_words||10000).toLocaleString('tr-TR')} kelime</span><button className="button light" onClick={()=>{setReadingIndex(0);setView('reader');}}>Kitabı oku</button><span className={'status-pill ' + activeStory.status}>{activeStory.status === 'published' ? 'Yayında' : activeStory.status === 'archived' ? 'Arşiv' : 'Taslak'}</span><button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(activeStory.id)}>Davet bağlantısı</button>{isStoryOwner && <button className="button light danger-button" disabled={storyBusy} onClick={deleteStory}>Hikâyeyi sil</button>}</div>
               </div>
 
+              <div className="story-target-control"><label>Hikâye kelime hedefi <input type="number" min="100" max="1000000" step="100" value={activeStory.target_words || 10000} onChange={async e=>{const target_words=Number(e.target.value);setStories(items=>items.map(s=>s.id===activeStory.id?{...s,target_words}:s));}} onBlur={async e=>{const {error}=await supabase.from('stories').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeStory.id);if(error)setNotice('Hedef güncellenemedi: '+error.message);else setNotice('Hikâye kelime hedefi güncellendi.');}}/></label><span>Bu hikâyenin tüm bölümlerinin toplamı için geçerli</span></div>
               <div className="chapter-layout">
                 <aside className="chapter-sidebar">
                   <div className="chapter-sidebar-title"><h3>Bölümler</h3><span>{chapters.length}</span></div>
@@ -550,20 +624,21 @@ export default function App() {
                     <div className="editor-toolbar"><span className="eyebrow">{focusMode ? 'ODAK MODU · YAZI ALANI' : 'BÖLÜM DÜZENLEYİCİ'}</span><div><span className="save-state">{editorDirty ? 'Kaydedilmemiş değişiklik' : 'Son sürüm kayıtlı'}</span><button type="button" className="text-button" onClick={() => setFocusMode(value => !value)}>{focusMode ? 'Odak modundan çık' : '⛶ Odak modu'}</button>{isStoryOwner && !focusMode && <button type="button" className="text-button danger" onClick={deleteChapter}>Bölümü sil</button>}</div></div>
                     {focusMode && <div className="focus-width-controls"><span>YAZMA ALANI</span><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Geniş · Word</button><span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime</span></div>}
                     <input className="chapter-title-input" required maxLength={120} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı"/>
-                    <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} kelime</span><label>Durum <select value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label></div>
+                    <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} / {(activeChapter.target_words||1000).toLocaleString('tr-TR')} kelime</span><label>Durum <select value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label><label>Bölüm hedefi <input className="inline-word-target" type="number" min="100" max="100000" step="100" value={activeChapter.target_words || 1000} onChange={async e=>{const target_words=Number(e.target.value);setChapters(items=>items.map(c=>c.id===activeChapter.id?{...c,target_words}:c));}} onBlur={async e=>{const {error}=await supabase.from('chapters').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeChapter.id);if(error)setNotice('Bölüm hedefi güncellenemedi: '+error.message);else setNotice('Bölüm kelime hedefi güncellendi.');}}/></label></div>
+                    {writingLock && <div className={'writing-presence ' + (writingLock.acquired ? 'is-self' : 'is-other')}><span className="writing-pencil">✎</span>{writingLock.acquired ? 'Şu anda bu bölümü sen yazıyorsun. Sıra sende.' : (writingLock.display_name || 'Bir yazar') + ' şu anda yazıyor · Bu bölüm geçici olarak kilitli.'}</div>}
                     <div className="chapter-blocks-editor" aria-label="Paragraf yazma alanı">
                       {editorBlocks.map((block, index) => <div className="chapter-block" key={block.id || 'new-' + index}>
-                        <textarea className="chapter-content-input chapter-block-input" value={block.content} onChange={e => {
+                        <textarea className="chapter-content-input chapter-block-input" disabled={!writingLock?.acquired} value={block.content} onChange={e => {
                           const next = editorBlocks.map((item, i) => i === index ? {...item,content:e.target.value} : item);
                           setEditorBlocks(next); setEditorContent(next.map(item => item.content).join('\n\n')); setEditorDirty(true);
                         }} placeholder="Paragrafını buraya yaz…" aria-label={'Paragraf ' + (index + 1)}/>
                         <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id === userId ? 'İlk yazar: Sen' : 'İlk yazar: ' + block.author_name) : 'Eski metin · İlk yazarı bilinmiyor'}{block.updated_by && block.updated_by !== block.author_id ? ' · Son düzenleyen: ' + (block.updated_by === userId ? 'Sen' : block.editor_name) : ''} · {words(block.content)} kelime</span>
-                          <button type="button" className="text-button danger" onClick={() => {const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item => item.content).join('\n\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
+                          <button type="button" className="text-button danger" disabled={!writingLock?.acquired} onClick={() => {const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item => item.content).join('\n\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
                         </div>
                       </div>)}
-                      <button type="button" className="add-paragraph-button" onClick={() => {setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yeni paragraf ekle</button>
+                      <button type="button" className="add-paragraph-button" disabled={!writingLock?.acquired} onClick={() => {setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yeni paragraf ekle</button>
                     </div>
-                    <div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Değişiklikleri kaydet'}</button></div>
+                    <div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Değişiklikleri kaydet'}</button></div>
                     {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>
                       {revisions.length ? revisions.map(revision => <article key={revision.id}><div><strong>{revision.title}</strong><small>{new Date(revision.created_at).toLocaleString('tr-TR')} · {words(revision.content)} kelime</small></div><button type="button" className="button light" onClick={() => restoreRevision(revision)}>Geri yükle</button></article>) : <p>Henüz önceki bir sürüm yok.</p>}
                     </div>}

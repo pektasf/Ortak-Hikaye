@@ -102,3 +102,15 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [x] Paragraf katkı sayısı ve ilk yazar bazlı kelime istatistiklerini profil sayfasında gösterme
 - [ ] Paragraf silme/geri alma geçmişini görünür kılma
 - [ ] Eşzamanlı düzenlemede çakışma kontrolü
+
+
+## Aşama 7 — Kitap deneyimi, sosyal ağ ve canlı yazım
+- [x] Yazar profillerinin giriş yapmış topluluğa açılması
+- [x] Yazar arama/keşfet ekranı ve takip/takipçi ilişkisi
+- [x] Davet istatistiğinin gerçek katılım üzerinden hesaplanması
+- [x] Bölüm için tek aktif yazar kilidi ve gerçek zamanlı yazma durumu
+- [x] Bölüm, hikâye ve kitap kelime sınırlarının sunucu tarafında denetlenmesi
+- [ ] Kitap okuyucu görünümü ve sayfalı/kesintisiz okuma tercihi
+- [ ] Profil fotoğrafı yükleme, bildirimler ve takip akışı
+- [ ] Gerçek iki hesapla eşzamanlı yazım ve kilit devri testi
+- [ ] Mobil erişilebilirlik, hareket azaltma tercihi ve uçtan uca görsel test

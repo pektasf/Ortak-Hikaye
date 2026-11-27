@@ -226,6 +226,7 @@ export default function App() {
   }
 
   async function openProfile() {
+    if (editorDirty && !window.confirm('Kaydedilmemiş bölüm değişikliklerin var. Profil sayfasına geçmek istiyor musun?')) return;
     setProfileBusy(true);
     const { data, error } = await supabase.rpc('get_author_profile', { p_user_id: userId });
     if (error) setNotice('Profil yüklenemedi: ' + error.message);
@@ -448,13 +449,14 @@ export default function App() {
       </div> : <>
         {view === 'profile' ? <section className="profile-page">
           <div className="profile-page-heading"><button className="text-button" onClick={() => setView('workspace')}>← Çalışma alanına dön</button><span className="eyebrow">ORTAK ROMAN · YAZAR KARTI</span></div>
-          <div className="profile-hero"><div className="profile-avatar">{(profile?.display_name || 'Y').slice(0,1).toLocaleUpperCase('tr-TR')}</div><div><span className="eyebrow">YAZAR</span><h1>{profile?.display_name || 'Yazar'}</h1><p>Katılım: {profile?.member_since ? new Date(profile.member_since).toLocaleDateString('tr-TR',{year:'numeric',month:'long'}) : 'Yeni yazar'}</p></div></div>
+          <div className="profile-hero"><div className="profile-avatar">{(profile?.display_name || 'Y').slice(0,1).toLocaleUpperCase('tr-TR')}</div><div><span className="eyebrow">YAZAR</span><h1>{profile?.display_name || 'Yazar'}</h1>{profile?.bio && <p className="profile-bio">{profile.bio}</p>}<p>Katılım: {profile?.member_since ? new Date(profile.member_since).toLocaleDateString('tr-TR',{year:'numeric',month:'long'}) : 'Yeni yazar'}</p></div></div>
           <div className="profile-stats-grid">
             <article><strong>{profile?.stats?.stories_created ?? 0}</strong><span>Hikâye başlattı</span></article>
             <article><strong>{profile?.stats?.stories_joined ?? 0}</strong><span>Hikâyeye katıldı</span></article>
             <article><strong>{profile?.stats?.chapters_written ?? 0}</strong><span>Bölüm oluşturdu</span></article>
             <article><strong>{Number(profile?.stats?.words_in_started_chapters || 0).toLocaleString('tr-TR')}</strong><span>Başlattığı bölümlerdeki kelime</span></article>
-            <article><strong>{profile?.stats?.invites_sent ?? 0}</strong><span>Davet gönderdi</span></article>
+            <article><strong>{profile?.stats?.writers_invited ?? 0}</strong><span>Davetle katılan yazar</span></article>
+            <article><strong>{profile?.stats?.invite_links_created ?? 0}</strong><span>Davet bağlantısı oluşturdu</span></article>
             <article><strong>{profile?.stats?.chapter_edits ?? 0}</strong><span>Bölüm düzenlemesi</span></article>
             <article className="profile-stat-upcoming"><strong>Yakında</strong><span>Altı çizilen cümleler</span></article>
           </div>

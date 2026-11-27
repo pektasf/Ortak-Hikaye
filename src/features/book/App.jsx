@@ -154,12 +154,12 @@ export default function App() {
 
   async function makeInvite() {
     setBusy(true);
-    const { data, error } = await supabase.rpc('create_invite', { p_max_uses: 10, p_hours_valid: 168 });
+    const { data, error } = await supabase.rpc('create_invite', { p_max_uses: null, p_hours_valid: 168 });
     if (error) setNotice('Davet oluşturulamadı: ' + error.message);
     else {
       const url = window.location.origin + window.location.pathname + '?invite=' + encodeURIComponent(data);
       setInviteLink(url);
-      try { await navigator.clipboard.writeText(url); setNotice('10 kullanımlık, 7 gün geçerli davet bağlantısı oluşturuldu ve kopyalandı.'); }
+      try { await navigator.clipboard.writeText(url); setNotice('7 gün geçerli davet bağlantısı oluşturuldu ve kopyalandı.'); }
       catch { setNotice('Davet bağlantısı oluşturuldu. Aşağıdan kopyalayabilirsin.'); }
     }
     setBusy(false);
@@ -193,7 +193,7 @@ export default function App() {
       </section> : <>
         {role === 'owner' && <section className="panel invite-panel">
           <span className="eyebrow">YÖNETİCİ · DAVETLER</span><h2>Yeni yazar davet et</h2>
-          <p>Bağlantı 7 gün geçerlidir ve en fazla 10 yeni hesap tarafından kullanılabilir.</p>
+          <p>Bağlantı 7 gün geçerlidir ve süresi dolana kadar sınırsız sayıda yeni hesap tarafından kullanılabilir.</p>
           <button className="button" disabled={busy} onClick={makeInvite}>Davet bağlantısı oluştur</button>
           {inviteLink && <div className="invite-link"><input readOnly value={inviteLink} onFocus={e => e.target.select()} /><button className="button light" onClick={() => navigator.clipboard.writeText(inviteLink)}>Kopyala</button></div>}
         </section>}

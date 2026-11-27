@@ -228,7 +228,14 @@ export default function App() {
     if (error) { setNotice('Paragraflar yüklenemedi: ' + error.message); return []; }
     const { data: authors } = await supabase.rpc('get_story_author_names', { p_chapter_id: chapterId });
     const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name]));
-    const blocks = (data || []).map(block => ({...block,author_name:names[block.author_id] || (block.author_id ? 'Yazar' : 'Eski metin'),editor_name:names[block.updated_by] || 'Yazar'}));
+    let blocks = (data || []).map(block => ({...block,author_name:names[block.author_id] || (block.author_id ? 'Yazar' : 'Eski metin'),editor_name:names[block.updated_by] || 'Yazar'}));
+    // Older chapters may have content stored on chapters.content without chapter_blocks rows.
+    if (!blocks.length) {
+      const legacyContent = chapters.find(item => item.id === chapterId)?.content || '';
+      if (String(legacyContent).trim()) {
+        blocks = legacyContent.split(/\n\s*\n/).filter(Boolean).map(content => ({id:null,content,author_id:null,updated_by:null}));
+      }
+    }
     setEditorBlocks(blocks);
     setEditorContent(blocks.map(block => block.content).join('\n\n') || '');
     const localKey='ortak_roman_draft:'+userId+':'+chapterId;let localDraft=null;try{localDraft=JSON.parse(window.localStorage.getItem(localKey)||'null');}catch{localDraft=null;}
@@ -377,13 +384,11 @@ export default function App() {
       const chapter = chapters.find(item => item.id === activeChapterId);
       if (!chapter) { setLoadingChapterContent(false); return; }
       setEditorTitle(chapter.title || ''); setEditorStatus(chapter.status || 'draft');
-      const loaded = await loadChapterBlocks(chapter.id);
+      await loadChapterBlocks(chapter.id);
       if (!alive) return;
-      if (!loaded.length && chapter.content) {
-        const legacyBlocks = chapter.content.split(/\n\s*\n/).filter(Boolean).map(content => ({id:null,content,author_id:null,updated_by:null}));
-        setEditorBlocks(legacyBlocks); setEditorContent(chapter.content);
-      }
-      setEditorDirty(false); setLoadingChapterContent(false);
+      // Keep a restored personal draft marked as dirty so it remains protected
+      // and can be resumed without silently replacing it with the shared version.
+      setLoadingChapterContent(false);
     })();
     return () => { alive=false; };
   }, [authorized, focusMode, writingLock?.acquired, loadingChapterContent, activeChapterId]);
@@ -447,7 +452,9 @@ export default function App() {
   }, [focusMode, editorDirty]);
 
   useEffect(() => {
-    if (!activeChapter || editorDirty) return;
+    // The focus-mode loader is the single source of truth while a writing session is active.
+    // Avoid racing it with the preview loader and accidentally replacing restored draft text.
+    if (!activeChapter || editorDirty || focusMode) return;
     let cancelled = false;
     setEditorTitle(activeChapter.title);
     setEditorStatus(activeChapter.status || 'draft');
@@ -460,7 +467,7 @@ export default function App() {
       }
     });
     return () => { cancelled = true; };
-  }, [activeChapterId, activeChapter?.updated_at, editorDirty]);
+  }, [activeChapterId, activeChapter?.updated_at, editorDirty, focusMode]);
 
   useEffect(()=>{if(!activeChapter||!userId||!editorDirty)return;if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);setDraftSaveState('pending');draftSaveTimerRef.current=window.setTimeout(async()=>{const localKey='ortak_roman_draft:'+userId+':'+activeChapter.id;const canvas=document.querySelector('.writer-rich-canvas');const currentBlocks=canvas?readWriterCanvasBlocks(canvas,userId):editorBlocks;const blocks=currentBlocks.map(block=>({id:block.id||null,content:block.content,author_id:block.author_id||userId}));const updatedAt=new Date().toISOString();const draft={title:editorTitle,status:editorStatus,blocks,updated_at:updatedAt};try{window.localStorage.setItem(localKey,JSON.stringify(draft));}catch{setDraftSaveState('device-error');}const {error}=await supabase.from('chapter_drafts').upsert({chapter_id:activeChapter.id,user_id:userId,title:editorTitle.trim()||activeChapter.title,status:editorStatus,blocks,updated_at:updatedAt},{onConflict:'chapter_id,user_id'});setDraftSaveState(error?'device-only':'saved');if(error)setNotice('Taslak cihazda korundu; sunucuya eşitlenemedi: '+error.message);},1000);return()=>{if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);};},[activeChapter?.id,userId,editorDirty,editorTitle,editorStatus,editorBlocks,editorContent]);
 
@@ -1073,7 +1080,7 @@ export default function App() {
                       {focusMode ? <div className="writer-studio-brand"><button type="button" className="writer-back-button" onClick={exitWritingStudio} aria-label="Çalışma alanına dön">←</button><div><span className="writer-studio-book">{activeStory?.title || 'Ortak Roman'}</span><strong>{editorTitle || 'Yeni bölüm'}</strong></div></div> : <span className="eyebrow">BÖLÜM DÜZENLEYİCİ</span>}
                       <div className="writer-toolbar-actions">
                         <span className="save-state">{draftSaveState==='pending'?'Otomatik taslak kaydediliyor…':draftSaveState==='saved'?'✓ Kişisel taslağın korundu':draftSaveState==='device-only'?'✓ Cihazda korundu':editorDirty?'● Ortak okumaya henüz aktarılmadı':'✓ Ortak metin kaydedildi'}</span>
-                        {focusMode ? <button type="button" className="writer-exit-button" onClick={exitWritingStudio}>Çalışma alanına dön</button> : <button type="button" className="text-button" disabled={Boolean(activeWritingLocks[activeChapterId] && activeWritingLocks[activeChapterId].user_id !== userId)} onClick={() => {setLoadingChapterContent(true);setFocusMode(true);}}>⛶ Odak modunda yaz</button>}
+                        {focusMode ? <button type="button" className="writer-exit-button" onClick={exitWritingStudio}>Çalışma alanına dön</button> : <button type="button" className="text-button" disabled={Boolean(activeWritingLocks[activeChapterId] && activeWritingLocks[activeChapterId].user_id !== userId)} onClick={() => {setLoadingChapterContent(true);setFocusMode(true);}}>⛶ Yazmaya devam et</button>}
                         {isStoryOwner && !focusMode && <button type="button" className="text-button danger" onClick={deleteChapter}>Bölümü sil</button>}
                       </div>
                     </div>

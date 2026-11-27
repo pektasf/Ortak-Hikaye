@@ -6,6 +6,7 @@ import '../../styles/global.css';
 import '../../styles/editorial-design.css';
 import '../../styles/reader-pagination.css';
 import { findReaderAuthorBlock, findReaderParagraphOffset, getReaderParagraphCredits } from './reader-attribution.js';
+import { normalizeWriterPaste } from './writer-input.js';
 
 function renderHighlightedText(content, blockId, highlights) {
   const text = String(content || '');
@@ -1168,6 +1169,8 @@ export default function App() {
             <label>BÖLÜM <select value={readerChapter?.id || ''} onChange={e=>{const index=readerChapters.findIndex(item=>item.id===e.target.value);setReadingIndex(Math.max(0,index));setReaderPageIndex(0);}}>{readerChapters.map((chapter,index)=><option key={chapter.id} value={chapter.id}>{String(index+1).padStart(2,'0')} · {chapter.title}{chapter.status==='published'?'':' · Çalışma nüshası'}</option>)}</select></label>
             <label>OKUMA DÜZENİ <select value={readerLayout} onChange={e=>{setReaderLayout(e.target.value);setReaderPageIndex(0);setReaderTurn(null);}}><option value="spread">Açık kitap · iki sayfa</option><option value="single">Tek sayfa</option><option value="scroll">Kesintisiz kaydırma</option></select></label>
             <div className="sentence-highlight-actions reader-highlight-actions">
+                         <button type="button" className="writer-history-button" aria-label="Son yazma işlemini geri al" title="Geri al" onMouseDown={e=>e.preventDefault()} onClick={()=>document.execCommand('undo')}>↶</button>
+                         <button type="button" className="writer-history-button" aria-label="Geri alınan işlemi yinele" title="Yinele" onMouseDown={e=>e.preventDefault()} onClick={()=>document.execCommand('redo')}>↷</button>
               <button type="button" className="sentence-highlight-button" disabled={!readerSelectedSentence} onMouseDown={e=>e.preventDefault()} onClick={addReaderSentenceHighlight}>↗ Cümlenin altını çiz</button>
               <span>{readerSelectedSentence ? 'Seçilen cümle hazır' : 'Önce bir cümle seç'}</span>
             </div>
@@ -1279,7 +1282,7 @@ export default function App() {
                     <div className="editor-toolbar">
                       {focusMode ? <div className="writer-studio-brand"><button type="button" className="writer-back-button" onClick={exitWritingStudio} aria-label="Çalışma alanına dön">←</button><div><span className="writer-studio-book">{activeStory?.title || 'Ortak Roman'}</span><strong>{editorTitle || 'Yeni bölüm'}</strong></div></div> : <span className="eyebrow">BÖLÜM DÜZENLEYİCİ</span>}
                       <div className="writer-toolbar-actions">
-                        <span className="save-state">{draftSaveState==='pending'?'Otomatik taslak kaydediliyor…':draftSaveState==='saved'?'✓ Kişisel taslağın korundu':draftSaveState==='device-only'?'✓ Cihazda korundu':editorDirty?'● Ortak okumaya henüz aktarılmadı':'✓ Ortak metin kaydedildi'}</span>
+                        <span className="save-state" role="status" aria-live="polite">{draftSaveState==='pending'?'Otomatik taslak kaydediliyor…':draftSaveState==='saved'?'✓ Kişisel taslağın korundu':draftSaveState==='device-only'?'✓ Cihazda korundu':editorDirty?'● Ortak okumaya henüz aktarılmadı':'✓ Ortak metin kaydedildi'}</span>
                         {focusMode ? <button type="button" className="writer-exit-button" onClick={exitWritingStudio}>Çalışma alanına dön</button> : <button type="button" className="text-button" disabled={Boolean(activeWritingLocks[activeChapterId] && activeWritingLocks[activeChapterId].user_id !== userId)} onClick={() => {setLoadingChapterContent(true);setFocusMode(true);}}>⛶ Yazmaya devam et</button>}
                         {isStoryOwner && !focusMode && <button type="button" className="text-button danger" onClick={deleteChapter}>Bölümü sil</button>}
                       </div>
@@ -1295,7 +1298,7 @@ export default function App() {
                         <button type="button" className="sentence-highlight-button" disabled={!selectedSentence || !writingLock?.acquired} onMouseDown={e=>e.preventDefault()} onClick={addSentenceHighlight}>↗ Cümlenin altını çiz</button>
                         <span>{sentenceHighlights.length} cümle vurgusu</span>
                       </div>
-                      <span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime</span>
+                      <span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime · {editorContent.split(/\n\s*\n/).filter(item=>item.trim()).length} paragraf</span>
                     </div>}
                     <input className="chapter-title-input" required maxLength={120} disabled={!writingLock?.acquired} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı" placeholder="Bölüm başlığı"/>
                     <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} / {chapterWordLimit > 0 ? chapterWordLimit.toLocaleString('tr-TR') + ' kelime' : 'Sınır yok'}</span><label>Durum <select disabled={!writingLock?.acquired} value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label>{isStoryOwner ? <label>Bölüm kelime sınırı (0 = sınırsız) <input className="inline-word-target" type="number" min="0" max="100000" step="100" value={activeChapter.target_words ?? 0} onChange={e=>{const target_words=Number(e.target.value);setChapters(items=>items.map(c=>c.id===activeChapter.id?{...c,target_words}:c));}} onBlur={async e=>{const value=Number(e.target.value);if(!Number.isInteger(value)||value<0||value>100000){setNotice('Bölüm sınırı 0-100.000 arasında olmalı.');return;}const {error}=await supabase.from('chapters').update({target_words:value,updated_at:new Date().toISOString()}).eq('id',activeChapter.id);if(error)setNotice('Bölüm sınırı güncellenemedi: '+error.message);else setNotice(value===0?'Bölüm kelime sınırı kaldırıldı.':'Bölüm kelime sınırı güncellendi.');}}/></label> : <span className="chapter-word-limit-label">Bölüm sınırı: {chapterWordLimit > 0 ? chapterWordLimit.toLocaleString('tr-TR') + ' kelime' : 'Sınırsız'}</span>}</div>
@@ -1318,6 +1321,7 @@ export default function App() {
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
                         style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'Literata', 'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
                         onInput={e=>{const nodes=readWriterCanvasBlocks(e.currentTarget,userId);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
+                         onPaste={e=>{e.preventDefault();const plainText=normalizeWriterPaste(e.clipboardData?.getData('text/plain')||'');if(plainText)document.execCommand('insertText',false,plainText);}}
                         onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();e.currentTarget.closest('form')?.requestSubmit();}}}
                         onMouseUp={captureSentenceSelection}
                         onKeyUp={captureSentenceSelection}
@@ -1325,7 +1329,7 @@ export default function App() {
                         {editorBlocks.map((block,index)=><p key={block.id || 'legacy-'+index} data-block-id={block.id || ''} contentEditable={Boolean(writingLock?.acquired && (!block.id || block.author_id === userId))} suppressContentEditableWarning className={block.id && block.author_id !== userId ? 'writer-protected-block' : ''} title={block.id && block.author_id !== userId ? (block.author_name || 'Başka bir yazar') + ' tarafından yazıldı · Bu paragraf korunuyor' : undefined}>{block.content ? renderHighlightedText(block.content, block.id, sentenceHighlights) : <br/>}</p>)}<p className="writer-new-block" data-new-block="true" contentEditable={Boolean(writingLock?.acquired)} suppressContentEditableWarning data-placeholder="Yeni paragrafını buraya yaz…"><br/></p>
                       </div>}
                     </div>
-                    <p className="editor-save-help">Otomatik taslak yalnızca senin için saklanır. Diğer yazarların da Kitabı oku alanında görebilmesi için <strong>Kaydet ve okumada göster</strong> düğmesine bas. Taslak durumundaki metin yalnızca hikâye üyelerine görünür.</p><div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || chapterOverLimit || storyOverLimit || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Kaydet ve okumada göster'}</button></div>
+                    <p className="editor-save-help"><span className="writer-paste-note">Dışarıdan yapıştırılan metin, kitabın yazı düzenini korumak için biçimsiz eklenir. </span>Otomatik taslak yalnızca senin için saklanır. Diğer yazarların da Kitabı oku alanında görebilmesi için <strong>Kaydet ve okumada göster</strong> düğmesine bas. Taslak durumundaki metin yalnızca hikâye üyelerine görünür.</p><div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || chapterOverLimit || storyOverLimit || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Kaydet ve okumada göster'}</button></div>
                     {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>
                       {revisions.length ? revisions.map(revision => <article key={revision.id}><div><strong>{revision.title}</strong><small>{new Date(revision.created_at).toLocaleString('tr-TR')} · {words(revision.content)} kelime</small></div><button type="button" className="button light" onClick={() => restoreRevision(revision)}>Geri yükle</button></article>) : <p>Henüz önceki bir sürüm yok.</p>}
                     </div>}

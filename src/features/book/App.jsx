@@ -1,193 +1,179 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase/client.js';
-import { APP_CONFIG } from '../../config/app.js';
 import { words } from '../../lib/text.js';
 import SetupScreen from '../../components/setup/SetupScreen.jsx';
 import '../../styles/global.css';
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [entries, setEntries] = useState([]);
-  const [lock, setLock] = useState(null);
+  const [authorized, setAuthorized] = useState(false);
+  const [role, setRole] = useState('writer');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [book, setBook] = useState(null);
-  const [authorized, setAuthorized] = useState(false);
-  const [role, setRole] = useState('writer');
-  const [inviteLink, setInviteLink] = useState('');
   const [settings, setSettings] = useState({ title: '', subtitle: '', note: '', target_words: 1000, extension_words: 1000 });
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
-  const [myStories, setMyStories] = useState([]);
+  const [stories, setStories] = useState([]);
+  const [activeStoryId, setActiveStoryId] = useState('');
+  const [chapters, setChapters] = useState([]);
+  const [activeChapterId, setActiveChapterId] = useState('');
+  const [editorTitle, setEditorTitle] = useState('');
+  const [editorContent, setEditorContent] = useState('');
+  const [editorStatus, setEditorStatus] = useState('draft');
+  const [editorDirty, setEditorDirty] = useState(false);
   const [newStoryTitle, setNewStoryTitle] = useState('');
   const [newStoryDescription, setNewStoryDescription] = useState('');
+  const [newChapterTitle, setNewChapterTitle] = useState('');
   const [storyBusy, setStoryBusy] = useState(false);
   const [storyInviteLinks, setStoryInviteLinks] = useState({});
+  const [revisions, setRevisions] = useState([]);
+  const [showRevisions, setShowRevisions] = useState(false);
+
+  const userId = session?.user?.id;
+  const activeStory = stories.find(item => item.id === activeStoryId) || null;
+  const activeChapter = chapters.find(item => item.id === activeChapterId) || null;
+  const isStoryOwner = Boolean(activeStory && activeStory.owner_id === userId);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const invite = params.get('invite');
     const storyInvite = params.get('story_invite');
     const setup = params.get('setup');
-    if (invite) window.localStorage.setItem('ortak_roman_invite', invite);
     if (storyInvite) window.localStorage.setItem('ortak_roman_story_invite', storyInvite);
     if (setup === '1') window.localStorage.setItem('ortak_roman_bootstrap', '1');
-    if (invite || storyInvite || setup) window.history.replaceState({}, '', window.location.pathname);
+    if (storyInvite || setup) window.history.replaceState({}, '', window.location.pathname);
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, value) => setSession(value));
     return () => subscription.unsubscribe();
   }, []);
 
-  const userId = session?.user?.id;
-  const ownsLock = Boolean(lock?.user_id === userId && lock?.expires_at && new Date(lock.expires_at) > new Date());
-
   useEffect(() => {
     if (!supabase || !session) {
       setAuthorized(false);
+      setStories([]);
+      setChapters([]);
+      setActiveStoryId('');
       return;
     }
     let active = true;
     async function checkAccess() {
-      const storyInvite = window.localStorage.getItem('ortak_roman_story_invite');
-      if (storyInvite) {
-        const { error } = await supabase.rpc('redeem_story_invite', { p_token: storyInvite });
+      const token = window.localStorage.getItem('ortak_roman_story_invite');
+      if (token) {
+        const { error } = await supabase.rpc('redeem_story_invite', { p_token: token });
         window.localStorage.removeItem('ortak_roman_story_invite');
         if (error && active) setNotice('Hikâye daveti doğrulanamadı: ' + error.message);
       }
-      const invite = window.localStorage.getItem('ortak_roman_invite');
-      if (invite) {
-        const { error } = await supabase.rpc('redeem_invite', { p_token: invite });
-        window.localStorage.removeItem('ortak_roman_invite');
-        if (error && active) setNotice('Davet bağlantısı doğrulanamadı: ' + error.message);
-      }
       window.localStorage.removeItem('ortak_roman_bootstrap');
-      const { data, error } = await supabase.from('profiles')
-        .select('access_granted, role, display_name').eq('id', session.user.id).maybeSingle();
+      const [{ data: profile, error: profileError }, { data: memberships, error: membershipError }] = await Promise.all([
+        supabase.from('profiles').select('role,display_name').eq('id', session.user.id).maybeSingle(),
+        supabase.from('story_members').select('story_id,role').eq('user_id', session.user.id)
+      ]);
       if (!active) return;
-      if (error) setNotice('Üyelik kontrolü yapılamadı: ' + error.message);
-      setAuthorized(Boolean(data?.access_granted));
-      setRole(data?.role || 'writer');
-      if (data?.display_name && data.display_name !== 'Yazar') setName(data.display_name);
-      if (!data?.access_granted) setNotice('Bu hesap henüz davetle yetkilendirilmedi. Davet bağlantısını tekrar açıp giriş yap.');
+      if (profileError) setNotice('Profil kontrolü yapılamadı: ' + profileError.message);
+      if (membershipError) setNotice('Hikâye üyeliği kontrol edilemedi: ' + membershipError.message);
+      const nextRole = profile?.role || 'writer';
+      const allowed = ['owner', 'moderator'].includes(nextRole) || Boolean(memberships?.length);
+      setRole(nextRole);
+      setAuthorized(allowed);
+      if (profile?.display_name && profile.display_name !== 'Yazar') setName(profile.display_name);
+      if (!allowed) setNotice('Bu hesap henüz bir hikâyeye üye değil. Geçerli hikâye davet bağlantısını açıp yeniden giriş yap.');
     }
     checkAccess();
     return () => { active = false; };
   }, [session]);
 
-  async function refresh() {
+  async function refreshWorkspace() {
     if (!supabase || !session || !authorized) return;
-    const [e, b, l, s] = await Promise.all([
-      supabase.from('story_entries').select('*').order('created_at'),
+    const [bookResult, storyResult] = await Promise.all([
       supabase.from('books').select('*').limit(1).maybeSingle(),
-      supabase.from('writing_locks').select('*').eq('id', 1).maybeSingle(),
-      supabase.from('stories').select('id,title,description,status,owner_id,created_at').order('created_at', { ascending: false })
+      supabase.from('stories').select('id,title,description,status,owner_id,created_at,updated_at').order('updated_at', { ascending: false })
     ]);
-    if (e.error) setNotice(e.error.message);
-    if (e.data) setEntries(e.data);
-    if (b.data) setBook(b.data);
-    if (l.data) setLock(l.data);
-    if (s.data) setMyStories(s.data);
-    else if (s.error) setNotice('Hikâyeler yüklenemedi: ' + s.error.message);
+    if (bookResult.error) setNotice('Kitap bilgisi yüklenemedi: ' + bookResult.error.message);
+    else if (bookResult.data) setBook(bookResult.data);
+    if (storyResult.error) setNotice('Hikâyeler yüklenemedi: ' + storyResult.error.message);
+    else {
+      setStories(storyResult.data || []);
+      setActiveStoryId(current => (storyResult.data || []).some(item => item.id === current) ? current : (storyResult.data?.[0]?.id || ''));
+    }
+  }
+
+  async function refreshChapters(storyId = activeStoryId) {
+    if (!supabase || !storyId) { setChapters([]); return; }
+    const { data, error } = await supabase.from('chapters')
+      .select('id,story_id,title,content,status,sort_order,created_by,created_at,updated_at')
+      .eq('story_id', storyId).order('sort_order').order('created_at');
+    if (error) setNotice('Bölümler yüklenemedi: ' + error.message);
+    else {
+      setChapters(data || []);
+      setActiveChapterId(current => (data || []).some(item => item.id === current) ? current : (data?.[0]?.id || ''));
+    }
   }
 
   useEffect(() => {
-    if (!book || settingsDirty) return;
-    setSettings({ title: book.title || '', subtitle: book.subtitle || '', note: book.note || '', target_words: book.target_words || 1000, extension_words: book.extension_words || 1000 });
-  }, [book?.id, book?.title, book?.subtitle, book?.note, book?.target_words, book?.extension_words, settingsDirty]);
-
-  useEffect(() => {
-    if (!supabase || !session || !authorized) return;
-    refresh();
-    const channel = supabase.channel('ortak-roman-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'story_entries' }, refresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'writing_locks' }, refresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'books' }, refresh)
+    if (!authorized || !session) return;
+    refreshWorkspace();
+    const channel = supabase.channel('ortak-roman-workspace-' + session.user.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' }, refreshWorkspace)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chapters' }, () => refreshChapters())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'story_members' }, refreshWorkspace)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [session, authorized]);
 
   useEffect(() => {
-    if (!supabase || !ownsLock) return;
-    const timer = window.setInterval(async () => {
-      const { error } = await supabase.rpc('renew_writing_lock');
-      if (error) setNotice(error.message);
-    }, APP_CONFIG.HEARTBEAT);
-    return () => window.clearInterval(timer);
-  }, [ownsLock]);
+    if (!authorized || !activeStoryId) {
+      setChapters([]);
+      setActiveChapterId('');
+      return;
+    }
+    refreshChapters(activeStoryId);
+  }, [activeStoryId, authorized]);
+
+  useEffect(() => {
+    if (!activeChapter || editorDirty) return;
+    setEditorTitle(activeChapter.title);
+    setEditorContent(activeChapter.content || '');
+    setEditorStatus(activeChapter.status || 'draft');
+  }, [activeChapterId, activeChapter?.updated_at, editorDirty]);
+
+  useEffect(() => {
+    if (!book || settingsDirty) return;
+    setSettings({
+      title: book.title || '', subtitle: book.subtitle || '', note: book.note || '',
+      target_words: book.target_words || 1000, extension_words: book.extension_words || 1000
+    });
+  }, [book?.id, book?.title, book?.subtitle, book?.note, book?.target_words, book?.extension_words, settingsDirty]);
 
   if (!supabase) return <SetupScreen />;
 
-  const total = entries.reduce((sum, item) => sum + words(item.content), 0);
-  const target = book?.target_words || APP_CONFIG.INITIAL_WORD_TARGET;
-  const otherLock = Boolean(lock?.user_id && lock.user_id !== userId && lock.expires_at && new Date(lock.expires_at) > new Date());
-
   async function signIn(event) {
     event.preventDefault();
-    const invite = window.localStorage.getItem('ortak_roman_invite');
     const storyInvite = window.localStorage.getItem('ortak_roman_story_invite');
     const bootstrap = window.localStorage.getItem('ortak_roman_bootstrap') === '1';
-    if (!invite && !storyInvite && !bootstrap) {
-      setNotice('Giriş yapabilmek için önce davet bağlantısını açmalısın. İlk sahip hesabı kurulumu için site adresinin sonuna ?setup=1 ekle.');
+    if (!storyInvite && !bootstrap) {
+      setNotice('Giriş için önce hikâye davet bağlantısını açmalısın. Ana yönetici hesabı için site adresinin sonuna ?setup=1 ekle.');
       return;
     }
     setBusy(true);
     const redirect = window.location.origin + window.location.pathname +
-      (storyInvite ? '?story_invite=' + encodeURIComponent(storyInvite) : invite ? '?invite=' + encodeURIComponent(invite) : '?setup=1');
+      (storyInvite ? '?story_invite=' + encodeURIComponent(storyInvite) : '?setup=1');
     const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirect, shouldCreateUser: true }
+      email, options: { emailRedirectTo: redirect, shouldCreateUser: true }
     });
     setNotice(error?.message || 'Giriş bağlantısı e-posta adresine gönderildi. Bağlantıyı aynı cihazda aç.');
     setBusy(false);
   }
 
-  async function acquire() {
-    if (!name.trim()) { setNotice('Önce takma adını yaz.'); return; }
-    setBusy(true);
-    const { data, error } = await supabase.rpc('acquire_writing_lock', { p_display_name: name.trim() });
-    if (error) setNotice(error.message);
-    else if (data?.ok) { setLock(data.lock); setNotice('Yazma sırası sende.'); }
-    else setNotice(data?.message || 'Yazma sırası şu anda başkasında.');
-    setBusy(false);
-  }
-
-  async function submit() {
-    if (!draft.trim() || !ownsLock) return;
-    setBusy(true);
-    const { error } = await supabase.from('story_entries').insert({
-      user_id: userId, display_name: name.trim() || session.user.email, content: draft.trim()
-    });
-    if (error) setNotice(error.message);
-    else {
-      setDraft('');
-      await supabase.rpc('release_writing_lock');
-      setNotice('Katkın kitaba eklendi.');
-      await refresh();
+  async function copyLink(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setNotice('Davet bağlantısı kopyalandı.');
+    } catch {
+      setNotice('Bağlantıyı seçip kopyalayabilirsin.');
     }
-    setBusy(false);
-  }
-
-  async function release() {
-    await supabase.rpc('release_writing_lock');
-    await refresh();
-    setNotice('Yazma sırası bırakıldı.');
-  }
-
-  async function makeInvite() {
-    setBusy(true);
-    const { data, error } = await supabase.rpc('create_invite', { p_max_uses: null, p_hours_valid: 168 });
-    if (error) setNotice('Davet oluşturulamadı: ' + error.message);
-    else {
-      const url = window.location.origin + window.location.pathname + '?invite=' + encodeURIComponent(data);
-      setInviteLink(url);
-      try { await navigator.clipboard.writeText(url); setNotice('7 gün geçerli davet bağlantısı oluşturuldu ve kopyalandı.'); }
-      catch { setNotice('Davet bağlantısı oluşturuldu. Aşağıdan kopyalayabilirsin.'); }
-    }
-    setBusy(false);
   }
 
   async function createStory(event) {
@@ -200,10 +186,11 @@ export default function App() {
     }).select().single();
     if (error) setNotice('Hikâye oluşturulamadı: ' + error.message);
     else {
-      setMyStories(items => [data, ...items]);
+      setStories(items => [data, ...items]);
+      setActiveStoryId(data.id);
       setNewStoryTitle('');
       setNewStoryDescription('');
-      setNotice('Hikâyen oluşturuldu. Şimdi başkalarını davet edebilirsin.');
+      setNotice('Hikâyen oluşturuldu. İlk bölümünü şimdi ekleyebilirsin.');
     }
     setStoryBusy(false);
   }
@@ -217,10 +204,103 @@ export default function App() {
     else {
       const url = window.location.origin + window.location.pathname + '?story_invite=' + encodeURIComponent(data);
       setStoryInviteLinks(items => ({ ...items, [storyId]: url }));
-      try { await navigator.clipboard.writeText(url); setNotice('7 gün geçerli hikâye daveti oluşturuldu ve kopyalandı.'); }
-      catch { setNotice('Hikâye daveti oluşturuldu. Bağlantıyı aşağıdan kopyalayabilirsin.'); }
+      await copyLink(url);
+      setNotice('7 gün geçerli hikâye daveti oluşturuldu ve kopyalandı.');
     }
     setStoryBusy(false);
+  }
+
+  async function createChapter(event) {
+    event.preventDefault();
+    if (!activeStory || !newChapterTitle.trim()) return;
+    setStoryBusy(true);
+    const { data, error } = await supabase.from('chapters').insert({
+      story_id: activeStory.id, title: newChapterTitle.trim(),
+      content: '', status: 'draft', created_by: userId,
+      sort_order: chapters.length ? Math.max(...chapters.map(item => item.sort_order || 0)) + 1 : 1
+    }).select().single();
+    if (error) setNotice('Bölüm oluşturulamadı: ' + error.message);
+    else {
+      setChapters(items => [...items, data]);
+      setActiveChapterId(data.id);
+      setNewChapterTitle('');
+      setEditorDirty(false);
+      setNotice('Yeni bölüm oluşturuldu.');
+    }
+    setStoryBusy(false);
+  }
+
+  async function saveChapter(event) {
+    event.preventDefault();
+    if (!activeChapter || !editorTitle.trim()) return;
+    setBusy(true);
+    const { data, error } = await supabase.from('chapters').update({
+      title: editorTitle.trim(), content: editorContent, status: editorStatus
+    }).eq('id', activeChapter.id).select().single();
+    if (error) setNotice('Bölüm kaydedilemedi: ' + error.message);
+    else {
+      setChapters(items => items.map(item => item.id === data.id ? data : item));
+      setEditorDirty(false);
+      setNotice('Bölüm kaydedildi. Önceki sürüm geçmişte saklandı.');
+    }
+    setBusy(false);
+  }
+
+  async function openChapter(chapter) {
+    if (editorDirty && !window.confirm('Kaydedilmemiş değişikliklerin var. Bölüm değiştirmek istiyor musun?')) return;
+    setActiveChapterId(chapter.id);
+    setEditorTitle(chapter.title);
+    setEditorContent(chapter.content || '');
+    setEditorStatus(chapter.status || 'draft');
+    setEditorDirty(false);
+    setShowRevisions(false);
+    await supabase.from('reading_progress').upsert({
+      user_id: userId, story_id: chapter.story_id, chapter_id: chapter.id, scroll_position: 0
+    }, { onConflict: 'user_id,story_id' });
+  }
+
+  async function deleteChapter() {
+    if (!activeChapter || !isStoryOwner) return;
+    if (!window.confirm('Bu bölümü ve sürüm geçmişini silmek istediğine emin misin?')) return;
+    const { error } = await supabase.from('chapters').delete().eq('id', activeChapter.id);
+    if (error) setNotice('Bölüm silinemedi: ' + error.message);
+    else {
+      setChapters(items => items.filter(item => item.id !== activeChapter.id));
+      setActiveChapterId('');
+      setEditorDirty(false);
+      setNotice('Bölüm silindi.');
+    }
+  }
+
+  async function loadRevisions() {
+    if (!activeChapter) return;
+    const { data, error } = await supabase.from('chapter_revisions')
+      .select('id,title,content,editor_id,created_at')
+      .eq('chapter_id', activeChapter.id).order('created_at', { ascending: false }).limit(20);
+    if (error) setNotice('Sürüm geçmişi yüklenemedi: ' + error.message);
+    else {
+      setRevisions(data || []);
+      setShowRevisions(true);
+    }
+  }
+
+  async function restoreRevision(revision) {
+    if (!activeChapter || !window.confirm('Bu eski sürümü bölümün güncel içeriği olarak geri yüklemek istiyor musun?')) return;
+    setBusy(true);
+    const { data, error } = await supabase.from('chapters').update({
+      title: revision.title, content: revision.content
+    }).eq('id', activeChapter.id).select().single();
+    if (error) setNotice('Sürüm geri yüklenemedi: ' + error.message);
+    else {
+      setChapters(items => items.map(item => item.id === data.id ? data : item));
+      setEditorTitle(data.title);
+      setEditorContent(data.content);
+      setEditorStatus(data.status);
+      setEditorDirty(false);
+      setNotice('Önceki sürüm geri yüklendi.');
+      await loadRevisions();
+    }
+    setBusy(false);
   }
 
   async function saveBookSettings(event) {
@@ -234,17 +314,12 @@ export default function App() {
     }
     setSettingsBusy(true);
     const { data, error } = await supabase.from('books').update({
-      title: settings.title.trim() || 'Ortak Roman',
-      subtitle: settings.subtitle.trim(),
-      note: settings.note.trim(),
-      target_words: targetWords,
-      extension_words: extensionWords,
-      updated_at: new Date().toISOString()
+      title: settings.title.trim() || 'Ortak Roman', subtitle: settings.subtitle.trim(),
+      note: settings.note.trim(), target_words: targetWords, extension_words: extensionWords
     }).eq('id', book.id).select().single();
     if (error) setNotice('Kitap ayarları kaydedilemedi: ' + error.message);
     else {
       setBook(data);
-      setSettings({ title: data.title, subtitle: data.subtitle, note: data.note, target_words: data.target_words, extension_words: data.extension_words });
       setSettingsDirty(false);
       setNotice('Kitap ayarları kaydedildi.');
     }
@@ -253,19 +328,23 @@ export default function App() {
 
   if (session && !authorized) {
     return <div className="setup"><div className="setup-card">
-      <small>ORTAK ROMAN · DAVET KONTROLÜ</small>
-      <h1>Üyeliğin doğrulanıyor</h1>
-      <p>{notice || 'Bu hesap için geçerli bir davet bağlantısı gerekli.'}</p>
-      <p>Davet bağlantısını açtıktan sonra e-posta ile giriş işlemini yeniden başlat. Yöneticiysen ilk hesap yetkisini Supabase kurulum adımında tanımlamalısın.</p>
+      <small>ORTAK ROMAN · HİKÂYE ERİŞİMİ</small>
+      <h1>Hesabın henüz bir hikâyeye bağlı değil</h1>
+      <p>{notice || 'Bu alan yalnızca hikâye üyelerine açıktır.'}</p>
+      <p>Bir yazarın gönderdiği hikâye davet bağlantısını açıp e-posta girişini yeniden tamamla.</p>
       <button className="button light" onClick={() => supabase.auth.signOut()}>Çıkış yap</button>
     </div></div>;
   }
 
+  const totalWords = chapters.reduce((sum, item) => sum + words(item.content || ''), 0);
+  const publishedChapters = chapters.filter(item => item.status === 'published').length;
+
   return <div className="app-shell">
-    <header className="topbar"><a className="brand" href={window.location.pathname}>✦ ORTAK <b>ROMAN</b></a>
-      {session ? <div className="account"><span>{session.user.email}</span><button className="button light" onClick={async () => { await release(); await supabase.auth.signOut(); }}>Çıkış</button></div> : <span className="eyebrow">DAVETLİ YAZARLAR</span>}
+    <header className="topbar">
+      <a className="brand" href={window.location.pathname}>✦ ORTAK <b>ROMAN</b></a>
+      {session ? <div className="account"><span>{session.user.email}</span><button className="button light" onClick={() => supabase.auth.signOut()}>Çıkış</button></div> : <span className="eyebrow">DAVETLİ YAZARLAR</span>}
     </header>
-    <main className={session ? "content" : "content login-content"}>
+    <main className={session ? 'content workspace-content' : 'content login-content'}>
       {!session ? <div className="login-layout">
         <section className="login-hero">
           <div className="login-hero-copy">
@@ -289,69 +368,85 @@ export default function App() {
             <input id="login-email" type="email" required placeholder="ornek@eposta.com" value={email} onChange={e => setEmail(e.target.value)} />
             <button className="button" disabled={busy}>{busy ? 'Gönderiliyor…' : 'Giriş bağlantısı gönder'} <span>→</span></button>
           </form>
-          <div className="login-footnote"><span>◈</span> Yalnızca davet bağlantısı olan kişiler katılabilir.</div>
+          <div className="login-footnote"><span>◈</span> Yalnızca geçerli hikâye daveti olan kişiler katılabilir.</div>
         </section>
       </div> : <>
-        <section className="hero">
-          <div><span className="eyebrow">BİRLİKTE YAZILAN BİR HİKÂYE</span>
-            <h1>{book?.title || 'Ortak Roman'}</h1><p>{book?.subtitle || 'Bir hikâye, birçok ses'}</p>{book?.note && <p className="book-note">{book.note}</p>}</div>
-          <div className="word-count"><strong>{total.toLocaleString('tr-TR')}</strong><span> / {target.toLocaleString('tr-TR')} kelime</span></div>
+        <section className="workspace-heading">
+          <div><span className="eyebrow">YAZAR ÇALIŞMA ALANI</span><h1>{book?.title || 'Ortak Roman'}</h1><p>{book?.subtitle || 'Bir hikâye, birçok ses'}</p></div>
+          <div className="workspace-stats"><strong>{stories.length}</strong><span>hikâye</span><i></i><strong>{publishedChapters}</strong><span>yayındaki bölüm</span></div>
         </section>
-        <div className="progress"><i style={{ width: Math.min(100, total / target * 100) + '%' }} /></div>
-      </>}
-      {session && <>
-        {role === 'owner' && <section className="panel invite-panel">
-          <span className="eyebrow">YÖNETİCİ · DAVETLER</span><h2>Yeni yazar davet et</h2>
-          <p>Bağlantı 7 gün geçerlidir ve süresi dolana kadar sınırsız sayıda yeni hesap tarafından kullanılabilir.</p>
-          <button className="button" disabled={busy} onClick={makeInvite}>Davet bağlantısı oluştur</button>
-          {inviteLink && <div className="invite-link"><input readOnly value={inviteLink} onFocus={e => e.target.select()} /><button className="button light" onClick={() => navigator.clipboard.writeText(inviteLink)}>Kopyala</button></div>}
-        </section>}
-        <section className="panel author-stories">
-          <span className="eyebrow">YAZAR ALANI</span>
-          <h2>Kendi hikâyelerini oluştur</h2>
-          <p>Her yazar kendi hikâyesini başlatabilir. Katıldığın hikâyelere de yeni yazarlar davet edebilirsin; davet yalnızca o hikâyeye erişim verir.</p>
-          <form onSubmit={createStory} className="story-create-form">
-            <label>Hikâye adı<input required maxLength={120} value={newStoryTitle} onChange={e => setNewStoryTitle(e.target.value)} placeholder="Hikâyenin adı" /></label>
-            <label>Kısa açıklama<textarea rows={2} maxLength={600} value={newStoryDescription} onChange={e => setNewStoryDescription(e.target.value)} placeholder="Hikâyenin konusu veya başlangıç fikri..." /></label>
-            <button className="button" disabled={storyBusy || !newStoryTitle.trim() || !book?.id}>{storyBusy ? 'İşleniyor…' : 'Hikâyemi oluştur'}</button>
-          </form>
-          <div className="author-story-list">
-            <h3>Hikâyelerim ve katıldıklarım</h3>
-            {myStories.length ? myStories.map(story => <article className="author-story-item" key={story.id}>
-              <div><strong>{story.title}</strong><p>{story.description || 'Henüz açıklama eklenmedi.'}</p><small>{story.owner_id === userId ? 'Senin hikâyen' : 'Katıldığın hikâye'}</small></div>
-              <div className="story-invite-actions">
-                <button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(story.id)}>Bu hikâyeye yazar davet et</button>
-                {storyInviteLinks[story.id] && <div className="story-link-copy"><input readOnly value={storyInviteLinks[story.id]} onFocus={e => e.target.select()} aria-label="Hikâye davet bağlantısı" /><button className="button light" onClick={() => navigator.clipboard.writeText(storyInviteLinks[story.id])}>Kopyala</button></div>}
-              </div>
-            </article>) : <p>Henüz bir hikâye oluşturmadın veya davetle katılmadın.</p>}
-          </div>
-        </section>
-        {role === 'owner' && <section className="panel settings-panel">
-          <span className="eyebrow">YÖNETİCİ · KİTAP AYARLARI</span>
-          <h2>Romanı yapılandır</h2>
-          <p>Kitabın başlığını, konusunu ve kelime hedeflerini buradan yönetebilirsin.</p>
-          <form onSubmit={saveBookSettings}>
-            <label>Kitap başlığı<input required maxLength={100} value={settings.title} onChange={e => { setSettings(v => ({ ...v, title: e.target.value })); setSettingsDirty(true); }} /></label>
-            <label>Alt başlık<input maxLength={160} value={settings.subtitle} onChange={e => { setSettings(v => ({ ...v, subtitle: e.target.value })); setSettingsDirty(true); }} /></label>
-            <label>Romanın konusu / açıklaması<textarea className="settings-note" rows={4} maxLength={1200} value={settings.note} onChange={e => { setSettings(v => ({ ...v, note: e.target.value })); setSettingsDirty(true); }} placeholder="Hikâyenin dünyasını, temasını veya yazarlar için başlangıç notunu yaz..." /></label>
-            <div className="settings-numbers">
-              <label>Toplam kelime hedefi<input type="number" min="100" step="100" value={settings.target_words} onChange={e => { setSettings(v => ({ ...v, target_words: e.target.value })); setSettingsDirty(true); }} /></label>
-              <label>Uzatma miktarı<input type="number" min="100" step="100" value={settings.extension_words} onChange={e => { setSettings(v => ({ ...v, extension_words: e.target.value })); setSettingsDirty(true); }} /></label>
+        <section className="workspace-grid">
+          <aside className="workspace-sidebar">
+            <div className="sidebar-heading"><div><span className="eyebrow">KÜTÜPHANE</span><h2>Hikâyeler</h2></div><span className="story-count">{stories.length}</span></div>
+            <div className="story-nav">
+              {stories.map(story => <button key={story.id} className={'story-nav-item' + (story.id === activeStoryId ? ' active' : '')} onClick={() => {
+                if (editorDirty && !window.confirm('Kaydedilmemiş değişikliklerin var. Hikâye değiştirmek istiyor musun?')) return;
+                setEditorDirty(false); setActiveStoryId(story.id); setShowRevisions(false);
+              }}>
+                <span className="story-nav-icon">✳</span><span><strong>{story.title}</strong><small>{story.owner_id === userId ? 'Senin hikâyen' : 'Katıldığın hikâye'}</small></span>
+              </button>)}
+              {!stories.length && <p className="empty-small">Henüz hikâye yok. İlk hikâyeni oluştur.</p>}
             </div>
-            <div className="settings-actions"><span>Değişiklikler tüm yazarlara yansır.</span><button className="button" disabled={settingsBusy || !settingsDirty}>{settingsBusy ? 'Kaydediliyor…' : 'Ayarları kaydet'}</button></div>
+            {activeStory && <div className="sidebar-invite">
+              <button className="button light full" disabled={storyBusy} onClick={() => makeStoryInvite(activeStory.id)}>↗ Yazar davet et</button>
+              {storyInviteLinks[activeStory.id] && <div className="story-link-copy"><input readOnly value={storyInviteLinks[activeStory.id]} onFocus={e => e.target.select()} /><button className="button light" onClick={() => copyLink(storyInviteLinks[activeStory.id])}>Kopyala</button></div>}
+            </div>}
+            <div className="new-story">
+              <span className="eyebrow">YENİ BİR BAŞLANGIÇ</span>
+              <form onSubmit={createStory}>
+                <input required maxLength={120} value={newStoryTitle} onChange={e => setNewStoryTitle(e.target.value)} placeholder="Hikâyenin adı" aria-label="Yeni hikâye adı"/>
+                <textarea rows={2} maxLength={600} value={newStoryDescription} onChange={e => setNewStoryDescription(e.target.value)} placeholder="Kısa açıklama (isteğe bağlı)" aria-label="Hikâye açıklaması"/>
+                <button className="button full" disabled={storyBusy || !newStoryTitle.trim() || !book?.id}>{storyBusy ? 'Oluşturuluyor…' : '+ Hikâye oluştur'}</button>
+              </form>
+            </div>
+          </aside>
+
+          <section className="workspace-main">
+            {activeStory ? <>
+              <div className="story-heading">
+                <div><span className="eyebrow">SEÇİLİ HİKÂYE</span><h2>{activeStory.title}</h2><p>{activeStory.description || 'Bu hikâyenin dünyası henüz tanımlanmadı.'}</p></div>
+                <div className="story-heading-actions"><span className={'status-pill ' + activeStory.status}>{activeStory.status === 'published' ? 'Yayında' : activeStory.status === 'archived' ? 'Arşiv' : 'Taslak'}</span><button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(activeStory.id)}>Davet bağlantısı</button></div>
+              </div>
+
+              <div className="chapter-layout">
+                <aside className="chapter-sidebar">
+                  <div className="chapter-sidebar-title"><h3>Bölümler</h3><span>{chapters.length}</span></div>
+                  {chapters.map((chapter,index) => <button key={chapter.id} className={'chapter-nav-item' + (chapter.id === activeChapterId ? ' active' : '')} onClick={() => openChapter(chapter)}>
+                    <small>{String(index+1).padStart(2,'0')}</small><span><strong>{chapter.title}</strong><em>{chapter.status === 'published' ? 'Yayında' : 'Taslak'}</em></span>
+                  </button>)}
+                  {!chapters.length && <p className="empty-small">Bu hikâyede henüz bölüm yok.</p>}
+                  <form className="new-chapter-form" onSubmit={createChapter}>
+                    <input required maxLength={120} value={newChapterTitle} onChange={e => setNewChapterTitle(e.target.value)} placeholder="Yeni bölüm başlığı" aria-label="Yeni bölüm başlığı"/>
+                    <button className="button light full" disabled={storyBusy || !newChapterTitle.trim()}>+ Bölüm ekle</button>
+                  </form>
+                </aside>
+
+                <div className="chapter-editor-wrap">
+                  {activeChapter ? <form className="chapter-editor" onSubmit={saveChapter}>
+                    <div className="editor-toolbar"><span className="eyebrow">BÖLÜM DÜZENLEYİCİ</span><div><span className="save-state">{editorDirty ? 'Kaydedilmemiş değişiklik' : 'Son sürüm kayıtlı'}</span>{isStoryOwner && <button type="button" className="text-button danger" onClick={deleteChapter}>Bölümü sil</button>}</div></div>
+                    <input className="chapter-title-input" required maxLength={120} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı"/>
+                    <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} kelime</span><label>Durum <select value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label></div>
+                    <textarea className="chapter-content-input" value={editorContent} onChange={e => {setEditorContent(e.target.value);setEditorDirty(true);}} placeholder="Hikâyenin ilk cümlesini buraya yaz..." aria-label="Bölüm metni"/>
+                    <div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Değişiklikleri kaydet'}</button></div>
+                    {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>
+                      {revisions.length ? revisions.map(revision => <article key={revision.id}><div><strong>{revision.title}</strong><small>{new Date(revision.created_at).toLocaleString('tr-TR')} · {words(revision.content)} kelime</small></div><button type="button" className="button light" onClick={() => restoreRevision(revision)}>Geri yükle</button></article>) : <p>Henüz önceki bir sürüm yok.</p>}
+                    </div>}
+                  </form> : <div className="chapter-empty"><span>✳</span><h3>İlk bölümü yazmaya başla.</h3><p>Bu hikâyeye bir bölüm ekle; davet ettiğin yazarlar da birlikte geliştirebilir.</p></div>}
+                </div>
+              </div>
+            </> : <div className="chapter-empty welcome-empty"><span>✦</span><h2>Bir hikâyeyle başlayalım.</h2><p>Soldaki alandan yeni bir hikâye oluştur. Her hikâyenin kendi yazarları, davetleri ve bölümleri olacak.</p></div>}
+          </section>
+        </section>
+        {role === 'owner' && <section className="panel settings-panel workspace-settings">
+          <span className="eyebrow">ANA YÖNETİCİ · KİTAP AYARLARI</span><h2>Kitap bilgileri</h2>
+          <form onSubmit={saveBookSettings}>
+            <label>Kitap başlığı<input required maxLength={100} value={settings.title} onChange={e => {setSettings(v => ({...v,title:e.target.value}));setSettingsDirty(true);}}/></label>
+            <label>Alt başlık<input maxLength={160} value={settings.subtitle} onChange={e => {setSettings(v => ({...v,subtitle:e.target.value}));setSettingsDirty(true);}}/></label>
+            <label>Kitap açıklaması<textarea rows={3} value={settings.note} onChange={e => {setSettings(v => ({...v,note:e.target.value}));setSettingsDirty(true);}}/></label>
+            <div className="settings-numbers"><label>Kelime hedefi<input type="number" min="100" step="100" value={settings.target_words} onChange={e => {setSettings(v => ({...v,target_words:e.target.value}));setSettingsDirty(true);}}/></label><label>Uzatma miktarı<input type="number" min="100" step="100" value={settings.extension_words} onChange={e => {setSettings(v => ({...v,extension_words:e.target.value}));setSettingsDirty(true);}}/></label></div>
+            <div className="settings-actions"><span>Değişiklikler tüm kitap alanına yansır.</span><button className="button" disabled={settingsBusy || !settingsDirty}>{settingsBusy ? 'Kaydediliyor…' : 'Ayarları kaydet'}</button></div>
           </form>
         </section>}
-        <section className="panel">
-          <span className="eyebrow">YAZMA SIRASI</span>
-          <h2>{ownsLock ? 'Kalem sende' : otherLock ? (lock.display_name + ' yazıyor') : 'Sıradaki yazar sen olabilirsin'}</h2>
-          <div className="writer-controls"><input maxLength={24} placeholder="Takma adın" value={name} onChange={e => setName(e.target.value)} />
-            {ownsLock ? <button className="button light" onClick={release}>Sırayı bırak</button> : <button className="button" disabled={busy || !!otherLock} onClick={acquire}>Yazma sırasını al</button>}</div>
-          {ownsLock && <><textarea value={draft} onChange={e => setDraft(e.target.value)} placeholder="Hikâyenin devamını buraya yaz..." />
-            <div className="draft-actions"><span>{words(draft)} / {APP_CONFIG.LIMIT} kelime</span><button className="button" disabled={busy || !draft.trim() || words(draft) > APP_CONFIG.LIMIT} onClick={submit}>Katkıyı ekle</button></div></>}
-        </section>
-        <section className="panel story"><span className="eyebrow">ROMANIN ŞİMDİYE KADAR OLANI</span><h2>Hikâye</h2>
-          {entries.length ? entries.map(entry => <article className="entry" key={entry.id}><p>{entry.content}</p><footer>{entry.display_name} · {new Date(entry.created_at).toLocaleString('tr-TR')}</footer></article>) : <p>İlk cümleyi bekliyoruz. Hikâyeyi başlatmak için yazma sırasını al.</p>}
-        </section>
       </>}
       {notice && <div className="notice" role="status">{notice}<button onClick={() => setNotice('')} aria-label="Bildirimi kapat">×</button></div>}
     </main>

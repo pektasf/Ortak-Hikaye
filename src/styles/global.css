@@ -830,3 +830,17 @@ input,textarea,select{font-size:13px}
   .reader-layout-single .reader-page-sheet{min-height:62vh}
   .reader-layout-single .reader-page-prose{font-size:17px;line-height:1.86}
 }
+
+
+/* Clear guidance for sharing saved writing with the story's readers. */
+.editor-save-help {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent, #9b8061);
+  border-radius: 0 8px 8px 0;
+  background: rgba(155, 128, 97, 0.08);
+  color: var(--muted, #716b63);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.editor-save-help strong { color: var(--ink, #302b26); }

@@ -108,7 +108,11 @@ export default function App() {
     if (error) setNotice('Bölümler yüklenemedi: ' + error.message);
     else {
       setChapters(data || []);
-      setActiveChapterId(current => (data || []).some(item => item.id === current) ? current : (data?.[0]?.id || ''));
+      const { data: progress } = await supabase.from('reading_progress')
+        .select('chapter_id').eq('user_id', userId).eq('story_id', storyId).maybeSingle();
+      setActiveChapterId(current => (data || []).some(item => item.id === current)
+        ? current
+        : ((data || []).some(item => item.id === progress?.chapter_id) ? progress.chapter_id : (data?.[0]?.id || '')));
     }
   }
 
@@ -315,7 +319,8 @@ export default function App() {
     setSettingsBusy(true);
     const { data, error } = await supabase.from('books').update({
       title: settings.title.trim() || 'Ortak Roman', subtitle: settings.subtitle.trim(),
-      note: settings.note.trim(), target_words: targetWords, extension_words: extensionWords
+      note: settings.note.trim(), target_words: targetWords, extension_words: extensionWords,
+      updated_at: new Date().toISOString()
     }).eq('id', book.id).select().single();
     if (error) setNotice('Kitap ayarları kaydedilemedi: ' + error.message);
     else {

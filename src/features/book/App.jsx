@@ -484,7 +484,7 @@ export default function App() {
     if (!supabase || !session || !authorized) return;
     const [bookResult, storyResult] = await Promise.all([
       supabase.from('books').select('*').limit(1).maybeSingle(),
-      supabase.from('stories').select('id,title,description,status,owner_id,target_words,created_at,updated_at').order('updated_at', { ascending: false })
+      supabase.from('stories').select('id,title,description,theme,status,owner_id,target_words,created_at,updated_at').order('updated_at', { ascending: false })
     ]);
     if (bookResult.error) setNotice('Kitap bilgisi yüklenemedi: ' + bookResult.error.message);
     else if (bookResult.data) setBook(bookResult.data);

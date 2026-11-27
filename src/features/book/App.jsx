@@ -117,6 +117,7 @@ export default function App() {
   const [readingIndex, setReadingIndex] = useState(0);
   const [writingLock, setWritingLock] = useState(null);
   const [activeWritingLocks, setActiveWritingLocks] = useState({});
+  const [writingPresenceReady, setWritingPresenceReady] = useState(false);
   const [loadingChapterContent, setLoadingChapterContent] = useState(false);
   const [lockNotice, setLockNotice] = useState('');
   const [view, setView] = useState('home');
@@ -147,7 +148,7 @@ export default function App() {
   const activeChapter = chapters.find(item => item.id === activeChapterId) || null;
   const isStoryOwner = Boolean(activeStory && activeStory.owner_id === userId);
   // Saved chapters are readable by story members before publication; publication is a separate status.
-  const readerChapters = chapters.filter(item => String(item.content || '').trim().length > 0 && !activeWritingLocks[item.id]);
+  const readerChapters = chapters.filter(item => writingPresenceReady && String(item.content || '').trim().length > 0 && !activeWritingLocks[item.id]);
   const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
   const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
   const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;
@@ -346,18 +347,19 @@ export default function App() {
   }, [activeStoryId, authorized]);
 
   useEffect(() => {
-    if (!authorized || !activeStoryId) { setActiveWritingLocks({}); return; }
+    if (!authorized || !activeStoryId) { setActiveWritingLocks({}); setWritingPresenceReady(false); return; }
+    setWritingPresenceReady(false);
     let alive = true;
     const refreshPresence = async () => {
       const ids = chapters.map(item => item.id);
-      if (!ids.length) { if (alive) setActiveWritingLocks({}); return; }
+      if (!ids.length) { if (alive) { setActiveWritingLocks({}); setWritingPresenceReady(true); } return; }
       const { data, error } = await supabase.from('chapter_writing_locks').select('chapter_id,user_id,expires_at').in('chapter_id', ids).gt('expires_at', new Date().toISOString());
       if (error) { if (alive) setNotice('Yazma durumu alınamadı: ' + error.message); return; }
       const rows = data || [];
       const { data: authors } = await supabase.rpc('get_story_author_names', { p_chapter_id: ids[0] });
       const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name || 'Bir yazar']));
       const next = Object.fromEntries(rows.map(item => [item.chapter_id, {user_id:item.user_id,display_name:names[item.user_id] || 'Bir yazar',expires_at:item.expires_at}]));
-      if (alive) setActiveWritingLocks(next);
+      if (alive) { setActiveWritingLocks(next); setWritingPresenceReady(true); }
     };
     refreshPresence();
     const channel = supabase.channel('story-writing-presence-' + activeStoryId).on('postgres_changes', {event:'*',schema:'public',table:'chapter_writing_locks'}, refreshPresence).subscribe();

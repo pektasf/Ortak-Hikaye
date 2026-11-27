@@ -151,7 +151,7 @@ export default function App() {
   const activeChapter = chapters.find(item => item.id === activeChapterId) || null;
   const isStoryOwner = Boolean(activeStory && activeStory.owner_id === userId);
   // Saved chapters are readable by story members before publication; publication is a separate status.
-  const readerChapters = chapters.filter(item => writingPresenceReady && String(item.content || '').trim().length > 0 && !activeWritingLocks[item.id]);
+  const readerChapters = chapters.filter(item => writingPresenceReady && String(item.content || '').trim().length > 0 && (!activeWritingLocks[item.id] || activeWritingLocks[item.id].user_id === userId));
   const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
   const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
   const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;

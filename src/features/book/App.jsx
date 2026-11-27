@@ -128,14 +128,15 @@ export default function App() {
   async function signIn(event) {
     event.preventDefault();
     const invite = window.localStorage.getItem('ortak_roman_invite');
+    const storyInvite = window.localStorage.getItem('ortak_roman_story_invite');
     const bootstrap = window.localStorage.getItem('ortak_roman_bootstrap') === '1';
-    if (!invite && !bootstrap) {
+    if (!invite && !storyInvite && !bootstrap) {
       setNotice('Giriş yapabilmek için önce davet bağlantısını açmalısın. İlk sahip hesabı kurulumu için site adresinin sonuna ?setup=1 ekle.');
       return;
     }
     setBusy(true);
     const redirect = window.location.origin + window.location.pathname +
-      (invite ? '?invite=' + encodeURIComponent(invite) : '?setup=1');
+      (storyInvite ? '?story_invite=' + encodeURIComponent(storyInvite) : invite ? '?invite=' + encodeURIComponent(invite) : '?setup=1');
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirect, shouldCreateUser: true }

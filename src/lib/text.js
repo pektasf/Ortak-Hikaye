@@ -1,0 +1,1 @@
+export const words = (value = '') => (value.trim().match(/\S+/g) || []).length;

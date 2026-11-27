@@ -5,7 +5,7 @@ import SetupScreen from '../../components/setup/SetupScreen.jsx';
 import '../../styles/global.css';
 import '../../styles/editorial-design.css';
 import '../../styles/reader-pagination.css';
-import { getReaderParagraphCredits } from './reader-attribution.js';
+import { findReaderAuthorBlock, findReaderParagraphOffset, getReaderParagraphCredits } from './reader-attribution.js';
 
 function renderHighlightedText(content, blockId, highlights) {
   const text = String(content || '');
@@ -51,10 +51,14 @@ function renderReaderHighlightedText(content, highlights) {
 }
 
 function renderReaderParagraph(content, blocks, highlights, key) {
+  const block = findReaderAuthorBlock(content, blocks);
   const credits = getReaderParagraphCredits(content, blocks);
+  const blockOffset = block ? findReaderParagraphOffset(content, block.content) : 0;
   return (
     <div className="reader-paragraph-group" key={key}>
-      <p className="reader-attributed-text">{renderReaderHighlightedText(content, highlights)}</p>
+      <p className="reader-attributed-text" data-block-id={block?.id || undefined} data-block-offset={blockOffset}>
+        {renderReaderHighlightedText(content, highlights)}
+      </p>
       {credits && <div className="reader-paragraph-credits" aria-label="Paragraf katkı bilgisi">
         {credits.authorName && <span className="reader-paragraph-credit"><small>YAZAR</small><strong title={credits.authorName}>{credits.authorName}</strong></span>}
         {credits.editorName && <span className="reader-paragraph-credit"><small>SON DÜZENLEYEN</small><strong title={credits.editorName}>{credits.editorName}</strong></span>}
@@ -722,7 +726,8 @@ export default function App() {
     const prefix = range.cloneRange();
     prefix.selectNodeContents(startParagraph);
     prefix.setEnd(range.startContainer, range.startOffset);
-    const startOffset = prefix.toString().length + leading;
+    const blockOffset = inReader ? Number(startParagraph.dataset.blockOffset || 0) : 0;
+    const startOffset = blockOffset + prefix.toString().length + leading;
     const payload = {
       chapter_id: inReader ? readerChapter?.id : activeChapterId,
       block_id: blockId,

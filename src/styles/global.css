@@ -410,3 +410,6 @@ input,textarea,select{border-color:#dfd4c7;background:#fffefa;border-radius:7px;
 .reader-layout-scroll .reader-controls{position:sticky;bottom:0}
 @media(max-width:760px){.reader-toolbar{grid-column:1/-1;align-items:flex-start;flex-direction:column}.reader-layout-spread .reader-spread{grid-template-columns:1fr;min-height:0}.reader-page-sheet{min-height:60vh;padding:28px 24px 30px}.reader-page-sheet.page-right{display:none}.reader-page-sheet.page-left{min-height:60vh}.page-flip-overlay{width:100%}.reader-controls{padding:12px 10px}.reader-controls .button{padding:9px 10px;font-size:10px}}
 @media(prefers-reduced-motion:reduce){.page-flip-overlay{animation:none!important}.reader-book,.reader-page-sheet,.writer-back-button{transition:none!important}}
+
+.focus-mode .chapter-editor{display:flex!important;flex-direction:column!important;gap:10px!important}
+.focus-mode .chapter-blocks-editor{flex:1 1 0!important}

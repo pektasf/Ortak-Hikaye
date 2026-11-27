@@ -87,7 +87,7 @@ export default function App() {
   async function loadChapterBlocks(chapterId) {
     const { data, error } = await supabase.from('chapter_blocks')
       .select('id,content,author_id,updated_by,position').eq('chapter_id', chapterId).order('position');
-    if (error) { setNotice('Paragraflar yüklenemedi: ' + error.message); return; }
+    if (error) { setNotice('Paragraflar yüklenemedi: ' + error.message); return []; }
     const { data: authors } = await supabase.rpc('get_story_author_names', { p_chapter_id: chapterId });
     const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name]));
     const blocks = (data || []).map(block => ({...block,author_name:names[block.author_id] || (block.author_id ? 'Yazar' : 'Eski metin'),editor_name:names[block.updated_by] || 'Yazar'}));
@@ -745,7 +745,7 @@ export default function App() {
                       </div>
                       <div className="writer-layout-group"><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Word sayfası</button></div>
                       <span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime · {editorBlocks.length} paragraf</span>
-                    </div>
+                    </div>}
                     <input className="chapter-title-input" required maxLength={120} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı" placeholder="Bölüm başlığı"/>
                     <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} / {(activeChapter.target_words||1000).toLocaleString('tr-TR')} kelime</span><label>Durum <select value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label><label>Bölüm hedefi <input className="inline-word-target" type="number" min="100" max="100000" step="100" value={activeChapter.target_words || 1000} onChange={async e=>{const target_words=Number(e.target.value);setChapters(items=>items.map(c=>c.id===activeChapter.id?{...c,target_words}:c));}} onBlur={async e=>{const {error}=await supabase.from('chapters').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeChapter.id);if(error)setNotice('Bölüm hedefi güncellenemedi: '+error.message);else setNotice('Bölüm kelime hedefi güncellendi.');}}/></label></div>
                     {chapterOverLimit && <div className="word-limit-warning">Bölüm kelime sınırını aştın. Kaydedebilmek için {Math.max(0,words(editorContent)-chapterWordLimit)} kelime azalt veya bölüm hedefini yükselt.</div>}

@@ -40,4 +40,4 @@ Supabase bağlantısı yapılandırılmadan uygulama kurulum ekranını gösteri
 - Tarayıcıdaki rol/görünürlük kontrolleri güvenlik sınırı değildir; yetkiler RLS ve RPC ile doğrulanır.
 
 ## Kaynak kodun korunması
-İlk HTML tabanlı sürüm, `docs/legacy/` altında referans olarak saklanır.
+İlk HTML/Claude Artifact dosyası mevcut çalışma alanında ayrı bir kaynak olarak korunuyor. Bu ilk GitHub aktarımında legacy HTML henüz depoya eklenmedi; sonraki aktarımda `docs/legacy/` altına eklenecek.

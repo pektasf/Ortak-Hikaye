@@ -144,7 +144,8 @@ export default function App() {
   const activeStory = stories.find(item => item.id === activeStoryId) || null;
   const activeChapter = chapters.find(item => item.id === activeChapterId) || null;
   const isStoryOwner = Boolean(activeStory && activeStory.owner_id === userId);
-  const readerChapters = chapters.filter(item => item.status === 'published');
+  // Saved chapters are readable by story members before publication; publication is a separate status.
+  const readerChapters = chapters.filter(item => String(item.content || '').trim().length > 0);
   const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
   const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
   const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;
@@ -315,7 +316,7 @@ export default function App() {
         .select('chapter_id,page_index,reader_layout,scroll_position').eq('user_id', userId).eq('story_id', storyId).maybeSingle();
       const restoredChapterId=(data||[]).some(item=>item.id===progress?.chapter_id)?progress.chapter_id:(data?.[0]?.id||'');
       setActiveChapterId(current=>(data||[]).some(item=>item.id===current)?current:restoredChapterId);
-      const restoredReaderIndex=(data||[]).filter(item=>item.status==='published').findIndex(item=>item.id===progress?.chapter_id);if(restoredReaderIndex>=0)setReadingIndex(restoredReaderIndex);
+      const restoredReaderIndex=(data||[]).filter(item=>String(item.content||'').trim().length>0).findIndex(item=>item.id===progress?.chapter_id);if(restoredReaderIndex>=0)setReadingIndex(restoredReaderIndex);
       if(progress?.reader_layout&&['single','spread','scroll'].includes(progress.reader_layout))setReaderLayout(progress.reader_layout);
       if(progress?.chapter_id===restoredChapterId){readerRestorePendingRef.current=true;readerPageRestoreRef.current=Math.max(0,progress.page_index||0);setReaderPageIndex(0);setReaderScrollRestore(Math.max(0,progress.scroll_position||0));}
     }
@@ -897,18 +898,18 @@ export default function App() {
         </section> : view === 'reader' ? <section className="reader-page">
           <div className="reader-topline"><button className="text-button" onClick={() => setView('workspace')}>← Çalışma alanı</button><span className="eyebrow">ORTAK ROMAN · KİTAP OKUYUCU</span><button className="text-button" onClick={() => setView('home')}>Kitaplığıma dön</button></div>
           <div className="reader-toolbar">
-            <label>BÖLÜM <select value={readerChapter?.id || ''} onChange={e=>{const index=readerChapters.findIndex(item=>item.id===e.target.value);setReadingIndex(Math.max(0,index));setReaderPageIndex(0);}}>{readerChapters.map((chapter,index)=><option key={chapter.id} value={chapter.id}>{String(index+1).padStart(2,'0')} · {chapter.title}</option>)}</select></label>
+            <label>BÖLÜM <select value={readerChapter?.id || ''} onChange={e=>{const index=readerChapters.findIndex(item=>item.id===e.target.value);setReadingIndex(Math.max(0,index));setReaderPageIndex(0);}}>{readerChapters.map((chapter,index)=><option key={chapter.id} value={chapter.id}>{String(index+1).padStart(2,'0')} · {chapter.title}{chapter.status==='published'?'':' · Çalışma nüshası'}</option>)}</select></label>
             <label>OKUMA DÜZENİ <select value={readerLayout} onChange={e=>{setReaderLayout(e.target.value);setReaderPageIndex(0);setReaderTurn(null);}}><option value="spread">Açık kitap · iki sayfa</option><option value="single">Tek sayfa</option><option value="scroll">Kesintisiz kaydırma</option></select></label>
             {isCompactReader && readerLayout === 'spread' && <small className="reader-responsive-note">Mobil ekranda rahat okuma için tek sayfa gösteriliyor.</small>}
           </div>
           <div className={'reader-book reader-layout-' + effectiveReaderLayout}>
             <div className="reader-running-head"><span>{book?.title || 'Ortak Roman'}</span><span>{activeStory?.title || ''}</span></div>
-            {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Bu kitapta henüz yayınlanmış bölüm yok.</h2><p>Bir bölüm yayınlandığında burada okunabilir.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
-              <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')}</span><h1>{readerChapter.title}</h1>
+            {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Henüz okunabilir kayıtlı metin yok.</h2><p>Yazarlar metinlerini kaydettikçe yayın öncesinde de burada birlikte okuyabilirsiniz.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
+              <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')} · {readerChapter.status==='published'?'YAYINDA':'ÇALIŞMA NÜSHASI · YAYINLANMADI'}</span><h1>{readerChapter.title}</h1>
               <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
             </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
               <article className="reader-page-sheet page-left">
-                <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}</span>
+                <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}{readerChapter.status!=='published'?' · ÇALIŞMA NÜSHASI':''}</span>
                 <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
                 <span className="reader-page-number">{readerPageIndex+1}</span>
               </article>
@@ -987,7 +988,7 @@ export default function App() {
                     <div className="editor-toolbar">
                       {focusMode ? <div className="writer-studio-brand"><button type="button" className="writer-back-button" onClick={exitWritingStudio} aria-label="Çalışma alanına dön">←</button><div><span className="writer-studio-book">{activeStory?.title || 'Ortak Roman'}</span><strong>{editorTitle || 'Yeni bölüm'}</strong></div></div> : <span className="eyebrow">BÖLÜM DÜZENLEYİCİ</span>}
                       <div className="writer-toolbar-actions">
-                        <span className="save-state">{draftSaveState==='pending'?'Taslak kaydediliyor…':draftSaveState==='saved'?'✓ Taslak korundu':draftSaveState==='device-only'?'✓ Cihazda korundu':editorDirty?'● Kaydedilmedi':'✓ Kaydedildi'}</span>
+                        <span className="save-state">{draftSaveState==='pending'?'Otomatik taslak kaydediliyor…':draftSaveState==='saved'?'✓ Kişisel taslağın korundu':draftSaveState==='device-only'?'✓ Cihazda korundu':editorDirty?'● Ortak okumaya henüz aktarılmadı':'✓ Ortak metin kaydedildi'}</span>
                         {focusMode ? <button type="button" className="writer-exit-button" onClick={exitWritingStudio}>Çalışma alanına dön</button> : <button type="button" className="text-button" onClick={() => setFocusMode(true)}>⛶ Odak modunda yaz</button>}
                         {isStoryOwner && !focusMode && <button type="button" className="text-button danger" onClick={deleteChapter}>Bölümü sil</button>}
                       </div>
@@ -1037,7 +1038,7 @@ export default function App() {
                         <button type="button" className="add-paragraph-button" disabled={!writingLock?.acquired} onClick={()=>{setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yeni paragraf ekle</button>
                       </>}
                     </div>
-                    <div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || chapterOverLimit || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Değişiklikleri kaydet'}</button></div>
+                    <p className="editor-save-help">Otomatik taslak yalnızca senin için saklanır. Diğer yazarların da Kitabı oku alanında görebilmesi için <strong>Kaydet ve okumada göster</strong> düğmesine bas. Taslak durumundaki metin yalnızca hikâye üyelerine görünür.</p><div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || chapterOverLimit || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Kaydet ve okumada göster'}</button></div>
                     {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>
                       {revisions.length ? revisions.map(revision => <article key={revision.id}><div><strong>{revision.title}</strong><small>{new Date(revision.created_at).toLocaleString('tr-TR')} · {words(revision.content)} kelime</small></div><button type="button" className="button light" onClick={() => restoreRevision(revision)}>Geri yükle</button></article>) : <p>Henüz önceki bir sürüm yok.</p>}
                     </div>}

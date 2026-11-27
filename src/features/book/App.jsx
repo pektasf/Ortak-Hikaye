@@ -102,6 +102,7 @@ export default function App() {
   const [readerPages, setReaderPages] = useState([]);
   const readerPageMeasureRef = useRef(null);
   const readerRestorePendingRef = useRef(false);
+  const readerPageRestoreRef = useRef(null);
   const readerProgressTimerRef = useRef(null);
   const [readerScrollRestore, setReaderScrollRestore] = useState(0);
   const [draftSaveState, setDraftSaveState] = useState('idle');
@@ -123,7 +124,7 @@ export default function App() {
   const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
   const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
   const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;
-  useEffect(()=>{if(view!=='reader'||effectiveReaderLayout==='scroll')return;let frame=0;const measure=()=>{window.cancelAnimationFrame(frame);frame=window.requestAnimationFrame(()=>setReaderPages(measureBookPages(readerChapter?.content||'',readerPageMeasureRef.current)));};measure();const el=readerPageMeasureRef.current;const observer=typeof ResizeObserver!=='undefined'&&el?new ResizeObserver(measure):null;if(observer&&el)observer.observe(el);window.addEventListener('resize',measure,{passive:true});document.fonts?.ready?.then(measure);return()=>{window.cancelAnimationFrame(frame);observer?.disconnect();window.removeEventListener('resize',measure);};},[view,readerChapter?.id,readerChapter?.content,effectiveReaderLayout]);
+  useEffect(()=>{if(view!=='reader'||effectiveReaderLayout==='scroll')return;setReaderPages([]);let frame=0;const measure=()=>{window.cancelAnimationFrame(frame);frame=window.requestAnimationFrame(()=>setReaderPages(measureBookPages(readerChapter?.content||'',readerPageMeasureRef.current)));};measure();const el=readerPageMeasureRef.current;const observer=typeof ResizeObserver!=='undefined'&&el?new ResizeObserver(measure):null;if(observer&&el)observer.observe(el);window.addEventListener('resize',measure,{passive:true});document.fonts?.ready?.then(measure);return()=>{window.cancelAnimationFrame(frame);observer?.disconnect();window.removeEventListener('resize',measure);};},[view,readerChapter?.id,readerChapter?.content,effectiveReaderLayout]);
   const readerMaxPageIndex = effectiveReaderLayout === 'spread'
     ? Math.max(0, Math.ceil(readerPages.length / 2) * 2 - 2)
     : Math.max(0, readerPages.length - 1);
@@ -292,7 +293,7 @@ export default function App() {
       setActiveChapterId(current=>(data||[]).some(item=>item.id===current)?current:restoredChapterId);
       const restoredReaderIndex=(data||[]).filter(item=>item.status==='published').findIndex(item=>item.id===progress?.chapter_id);if(restoredReaderIndex>=0)setReadingIndex(restoredReaderIndex);
       if(progress?.reader_layout&&['single','spread','scroll'].includes(progress.reader_layout))setReaderLayout(progress.reader_layout);
-      if(progress?.chapter_id===restoredChapterId){readerRestorePendingRef.current=true;setReaderPageIndex(Math.max(0,progress.page_index||0));setReaderScrollRestore(Math.max(0,progress.scroll_position||0));}
+      if(progress?.chapter_id===restoredChapterId){readerRestorePendingRef.current=true;readerPageRestoreRef.current=Math.max(0,progress.page_index||0);setReaderPageIndex(0);setReaderScrollRestore(Math.max(0,progress.scroll_position||0));}
     }
   }
 
@@ -765,6 +766,7 @@ export default function App() {
   const storyWordCount = chapters.reduce((sum,item) => sum + words(item.id === activeChapterId ? editorContent : (item.content || '')),0);
   const chapterWordLimit = activeChapter?.target_words || 1000;
   const chapterOverLimit = Boolean(activeChapter && words(editorContent) > chapterWordLimit);
+  useEffect(()=>{if(readerPageRestoreRef.current===null||!readerPages.length)return;setReaderPageIndex(Math.min(readerPageRestoreRef.current,readerMaxPageIndex));readerPageRestoreRef.current=null;},[readerPages.length,readerMaxPageIndex]);
   useEffect(()=>{if(view!=='reader'||effectiveReaderLayout!=='scroll'||!readerScrollRestore)return;const sheet=document.querySelector('.reader-scroll-sheet');if(sheet){sheet.scrollTop=readerScrollRestore;setReaderScrollRestore(0);}},[view,effectiveReaderLayout,readerChapter?.id,readerScrollRestore]);
 
   function turnBookPage(direction) {

@@ -864,7 +864,7 @@ export default function App() {
             </div>}
             <div className="reader-controls">
               <button className="button light" disabled={readingIndex===0 && readerPageIndex===0} onClick={()=>{if(effectiveReaderLayout!=='scroll' && readerPageIndex>0)turnBookPage(-1);else if(readingIndex>0){setReadingIndex(i=>i-1);setReaderPageIndex(0);}}}>← Önceki</button>
-              <span>{effectiveReaderLayout==='scroll' ? 'Bölüm '+(readingIndex+1)+' / '+readerChapters.length : 'Sayfa '+(Math.min(readerPageIndex+1,readerPages.length)||0)+'–'+(Math.min(readerPageIndex+(readerLayout==='spread'?2:1),readerPages.length)||0)+' / '+readerPages.length}</span>
+              <span aria-live="polite" aria-atomic="true">{effectiveReaderLayout==='scroll' ? 'Bölüm '+(readingIndex+1)+' / '+readerChapters.length : 'Sayfa '+(Math.min(readerPageIndex+1,readerPages.length)||0)+'–'+(Math.min(readerPageIndex+readerPageStep,readerPages.length)||0)+' / '+readerPages.length}</span>
               <button className="button" disabled={readingIndex>=readerChapters.length-1 && (effectiveReaderLayout==='scroll' || readerPageIndex>=readerMaxPageIndex)} onClick={()=>{if(effectiveReaderLayout!=='scroll' && readerPageIndex<readerMaxPageIndex)turnBookPage(1);else if(readingIndex<readerChapters.length-1){setReadingIndex(i=>i+1);setReaderPageIndex(0);}}}>Sonraki →</button>
             </div>
           </div>

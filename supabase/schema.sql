@@ -224,6 +224,7 @@ create policy "contributors change own vote" on public.story_votes
 
 grant usage on schema public to authenticated;
 grant select on public.profiles,public.books,public.story_entries,public.writing_locks,public.story_votes to authenticated;
+grant update on public.books to authenticated;
 grant insert,delete on public.story_entries to authenticated;
 grant insert,update on public.story_votes to authenticated;
 revoke all on public.invites from anon,authenticated;

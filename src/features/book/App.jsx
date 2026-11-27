@@ -172,7 +172,9 @@ export default function App() {
   const activeChapter = chapters.find(item => item.id === activeChapterId) || null;
   const isStoryOwner = Boolean(activeStory && activeStory.owner_id === userId);
   // Saved chapters are readable by story members before publication; publication is a separate status.
-  const readerChapters = chapters.filter(item => writingPresenceReady && String(item.content || '').trim().length > 0 && (!activeWritingLocks[item.id] || activeWritingLocks[item.id].user_id === userId));
+  // The reader always shows the latest saved snapshot, even while another author holds the writing lock.
+  // Unsaved edits stay private because only chapters.content (the last saved version) is rendered here.
+  const readerChapters = chapters.filter(item => writingPresenceReady && String(item.content || '').trim().length > 0);
   const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
   const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
   const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;

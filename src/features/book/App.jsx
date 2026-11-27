@@ -741,7 +741,12 @@ export default function App() {
       setChapters(items => items.map(item => item.id === data.id ? data : item));
       await loadChapterBlocks(activeChapter.id);
       setEditorDirty(false);setDraftSaveState('idle');window.localStorage.removeItem('ortak_roman_draft:'+userId+':'+activeChapter.id);await supabase.from('chapter_drafts').delete().eq('chapter_id',activeChapter.id).eq('user_id',userId);
-      setNotice('Bölüm kaydedildi. Paragraf katkıları yazarlarla eşleştirildi.');
+      const { error: releaseError } = await supabase.rpc('release_chapter_writing_lock', { p_chapter_id: activeChapter.id });
+      if (releaseError) setNotice('Bölüm kaydedildi ancak yazma kilidi bırakılamadı: ' + releaseError.message);
+      else setNotice('Bölüm kaydedildi ve artık diğer yazarların okumasına açıldı.');
+      setFocusMode(false);
+      setWritingLock(null);
+      setLoadingChapterContent(false);
     }
     setBusy(false);
   }

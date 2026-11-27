@@ -128,3 +128,13 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [ ] Uzun kitaplar için ölçüme dayalı gerçek içerik taşması ve otomatik sayfa kırılımı
 - [ ] Word (.docx) içe/dışa aktarma
 - [ ] Gerçek zamanlı ortak imleçler ve yazım çakışması testi
+
+
+## Aşama 9 — Yazma stüdyosu görsel kararlılığı
+- [x] Tam ekran odak modunda belge sayfasının yatay merkezlenmesi
+- [x] Tarayıcı kaydırmasının odak modu açıkken kilitlenmesi
+- [x] Kaydırmanın belge yüzeyinin içinde kalması
+- [x] Defter, Word ve kitap sayfası genişlik seçenekleri
+- [x] Kitap okuyucu için merkezi cilt/gutter ve iki sayfa dengesi
+- [x] Düşük yükseklikli ekran ve mobil düzen düzeltmeleri
+- [ ] Farklı çözünürlüklerde gerçek tarayıcı görsel testi

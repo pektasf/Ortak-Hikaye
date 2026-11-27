@@ -426,3 +426,373 @@ input,textarea,select{border-color:#dfd4c7;background:#fffefa;border-radius:7px;
 .writer-rich-canvas>p,.writer-rich-canvas>div{display:block;width:100%;max-width:100%;min-width:0;min-height:1.65em;margin:0 0 .85em;padding:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal}
 .writer-rich-canvas>p:has(>br:only-child)::before,.writer-rich-canvas>div:has(>br:only-child)::before{content:' ';display:inline-block;min-height:1em}
 .writer-rich-canvas[contenteditable="false"]{opacity:.76;cursor:not-allowed}
+
+
+/* ─────────────────────────────────────────────────────────────
+   FINAL COMPOSITION STUDIO — centered page, stable viewport, book paper
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --studio-ground:#e8e0d5;
+  --studio-paper:#fffefa;
+  --studio-ink:#40342d;
+  --studio-line:#e7ded3;
+  --studio-book-font:'Literata','EB Garamond',Georgia,serif;
+}
+html.writing-studio-active,
+html.writing-studio-active body{
+  width:100%;
+  height:100%;
+  min-height:100%;
+  overflow:hidden!important;
+  overscroll-behavior:none;
+}
+html.writing-studio-active body{margin:0!important}
+.chapter-editor-wrap.focus-mode{
+  position:fixed!important;
+  inset:0!important;
+  z-index:1200!important;
+  display:block!important;
+  width:100%!important;
+  max-width:none!important;
+  height:100vh!important;
+  height:100dvh!important;
+  max-height:none!important;
+  margin:0!important;
+  padding:0!important;
+  overflow:hidden!important;
+  background:
+    radial-gradient(ellipse at 50% 0%,rgba(255,255,255,.72),transparent 55%),
+    linear-gradient(145deg,#eee8df 0%,var(--studio-ground) 100%)!important;
+  isolation:isolate;
+}
+.chapter-editor-wrap.focus-mode::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  opacity:.45;
+  background-image:radial-gradient(#8e79651a .65px,transparent .65px);
+  background-size:5px 5px;
+}
+.focus-mode .chapter-editor{
+  position:relative!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+  justify-content:flex-start!important;
+  gap:clamp(8px,1.2vh,13px)!important;
+  width:100%!important;
+  max-width:none!important;
+  height:100vh!important;
+  height:100dvh!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0!important;
+  padding:clamp(10px,1.6vh,19px) clamp(12px,3vw,42px) clamp(10px,1.5vh,18px)!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain;
+  box-sizing:border-box!important;
+  scrollbar-width:thin;
+  scrollbar-color:#c7b8a7 transparent;
+}
+.focus-mode .chapter-editor>*{flex:0 0 auto;min-width:0}
+.focus-mode .editor-toolbar,
+.focus-mode .focus-width-controls,
+.focus-mode .chapter-title-input,
+.focus-mode .editor-meta,
+.focus-mode .writing-presence,
+.focus-mode .word-limit-warning,
+.focus-mode .editor-footer,
+.focus-mode .revision-list{
+  width:min(100%,1040px)!important;
+  max-width:1040px!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  box-sizing:border-box!important;
+}
+.focus-mode .editor-toolbar{
+  min-height:45px!important;
+  padding:0 0 10px!important;
+  border-bottom:1px solid rgba(112,87,67,.18)!important;
+}
+.focus-mode .writer-studio-brand{flex:1 1 auto;min-width:0}
+.focus-mode .writer-toolbar-actions{flex:0 0 auto;max-width:48%;gap:10px}
+.focus-mode .writer-studio-brand strong{max-width:min(52vw,560px);font-size:19px}
+.focus-mode .writer-exit-button{background:#f8f4ee;border-color:#d9cdbf;transition:background .2s,border-color .2s}
+.focus-mode .writer-exit-button:hover{background:#fffefa;border-color:#b9a48f}
+.focus-mode .focus-width-controls{
+  min-height:40px;
+  padding:0 2px!important;
+}
+.focus-mode .writer-format-group{gap:10px}
+.focus-mode .writer-format-group select{font-family:var(--font-ui);font-size:10px}
+.focus-mode .writer-layout-group{gap:5px;padding:3px;background:#e4dbd0;border:1px solid #ded3c6;border-radius:24px}
+.focus-mode .writer-layout-group button{min-width:56px;padding:7px 12px;border:0!important;background:transparent!important;color:#796657!important}
+.focus-mode .writer-layout-group button.active{background:#fffdf8!important;color:#594138!important;box-shadow:0 1px 4px #4a352018}
+.focus-mode .chapter-title-input{
+  flex:0 0 auto!important;
+  height:auto!important;
+  min-height:43px!important;
+  padding:5px 0 9px!important;
+  font:500 clamp(27px,3vw,37px)/1.15 var(--studio-book-font)!important;
+  letter-spacing:-.025em;
+  text-align:left;
+  border-bottom-color:#d9cec0!important;
+  overflow-wrap:anywhere!important;
+}
+.focus-mode .editor-meta{
+  min-height:28px;
+  justify-content:space-between!important;
+  padding:0 2px!important;
+}
+.focus-mode .editor-meta>span{font-variant-numeric:tabular-nums}
+.focus-mode .editor-meta label{white-space:nowrap}
+.focus-mode .writing-presence,
+.focus-mode .word-limit-warning{
+  flex:0 0 auto!important;
+  padding:7px 12px!important;
+}
+.focus-mode .chapter-blocks-editor{
+  /* The paper itself is fixed to the viewport centre; only this paper scrolls. */
+  position:relative!important;
+  flex:1 1 0%!important;
+  align-self:center!important;
+  width:min(var(--studio-page-width,820px),calc(100vw - 48px))!important;
+  max-width:min(var(--studio-page-width,820px),calc(100vw - 48px))!important;
+  min-width:0!important;
+  min-height:310px!important;
+  height:auto!important;
+  max-height:none!important;
+  margin:2px auto 3px!important;
+  padding:clamp(26px,4.5vh,54px) clamp(30px,6.2vw,76px)!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  border:1px solid #e1d7ca!important;
+  border-radius:2px!important;
+  background-color:var(--studio-paper)!important;
+  background-image:
+    linear-gradient(90deg,rgba(132,102,72,.055),transparent 23px,transparent calc(100% - 23px),rgba(132,102,72,.04)),
+    radial-gradient(ellipse at 48% 0%,rgba(255,255,255,.95),transparent 65%)!important;
+  box-shadow:
+    0 1px 1px rgba(255,255,255,.9) inset,
+    0 0 0 5px rgba(247,242,235,.65),
+    0 0 0 6px rgba(193,177,157,.35),
+    0 18px 58px rgba(58,42,29,.14),
+    0 3px 10px rgba(58,42,29,.08)!important;
+  box-sizing:border-box!important;
+  scrollbar-width:thin;
+  scrollbar-color:#d5c8b8 transparent;
+  transition:width .24s ease,box-shadow .24s ease;
+}
+.focus-width-notebook{--studio-page-width:760px}
+.focus-width-wide{--studio-page-width:1040px}
+.focus-width-book{--studio-page-width:850px}
+.focus-width-book .chapter-blocks-editor{
+  border-radius:3px 7px 7px 3px!important;
+  background-image:
+    linear-gradient(90deg,#eee6da 0,#fffefa 17px,#fffefa 96%,#f5eee4 100%),
+    radial-gradient(ellipse at 50% 0%,rgba(255,255,255,.95),transparent 65%)!important;
+  box-shadow:
+    inset 7px 0 10px rgba(93,65,44,.045),
+    0 1px 1px #fff inset,
+    0 0 0 5px #f3ece2,
+    0 0 0 6px #d9cbb9,
+    0 22px 64px rgba(58,42,29,.17)!important;
+}
+.focus-mode .writer-rich-canvas{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  min-height:100%!important;
+  margin:0 auto!important;
+  padding:0!important;
+  border:0!important;
+  outline:none!important;
+  background:transparent!important;
+  color:var(--studio-ink)!important;
+  font-family:var(--studio-book-font)!important;
+  font-size:20px;
+  line-height:1.9;
+  letter-spacing:.002em;
+  white-space:pre-wrap!important;
+  overflow-wrap:anywhere!important;
+  word-break:normal!important;
+  text-align:left!important;
+  caret-color:#865d4e;
+  tab-size:4;
+}
+.focus-mode .writer-rich-canvas:focus{outline:none!important;box-shadow:none!important}
+.focus-mode .writer-rich-canvas>p,
+.focus-mode .writer-rich-canvas>div{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  min-height:1.65em!important;
+  margin:0 0 .82em!important;
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+  color:inherit!important;
+  font:inherit!important;
+  letter-spacing:inherit!important;
+  text-align:inherit!important;
+  white-space:pre-wrap!important;
+  overflow-wrap:anywhere!important;
+  word-break:normal!important;
+}
+.focus-mode .writer-rich-canvas [data-placeholder]{white-space:pre-wrap}
+.focus-mode .writer-rich-canvas[contenteditable="false"]{opacity:.72;cursor:not-allowed}
+.focus-mode .chapter-blocks-editor::-webkit-scrollbar{width:9px}
+.focus-mode .chapter-blocks-editor::-webkit-scrollbar-thumb{background:#d7cabb;border:3px solid #fffefa;border-radius:8px}
+.focus-mode .editor-footer{
+  min-height:43px;
+  padding:9px 0 0!important;
+  border-top:1px solid rgba(112,87,67,.18)!important;
+}
+.focus-mode .editor-footer .button{min-width:160px}
+.focus-mode .revision-list{max-height:155px;overflow:auto}
+.focus-mode .chapter-block-meta{display:none!important}
+
+/* Calm manuscript typography and prevent width jumps at every breakpoint. */
+@media(min-width:1200px){
+  .focus-mode .chapter-editor{padding-top:14px!important;padding-bottom:14px!important}
+  .focus-mode .chapter-blocks-editor{padding-inline:clamp(64px,7vw,94px)!important}
+}
+@media(max-width:900px){
+  .focus-mode .chapter-editor{padding-inline:18px!important}
+  .focus-mode .chapter-blocks-editor{width:min(var(--studio-page-width,820px),calc(100vw - 36px))!important;max-width:min(var(--studio-page-width,820px),calc(100vw - 36px))!important;padding-inline:clamp(26px,5vw,54px)!important}
+}
+@media(max-width:680px){
+  .focus-mode .chapter-editor{gap:8px!important;padding:9px 10px 10px!important}
+  .focus-mode .editor-toolbar{min-height:39px!important;padding-bottom:7px!important}
+  .focus-mode .writer-studio-brand{gap:7px}
+  .focus-mode .writer-studio-brand strong{font-size:15px;max-width:42vw}
+  .focus-mode .writer-studio-book{font-size:7px}
+  .focus-mode .writer-toolbar-actions{max-width:45%;gap:5px}
+  .focus-mode .writer-toolbar-actions .save-state{display:none}
+  .focus-mode .writer-exit-button{font-size:9px;padding:7px 9px}
+  .focus-mode .focus-width-controls{align-items:flex-start;gap:7px}
+  .focus-mode .writer-format-group{width:100%;justify-content:space-between;gap:4px}
+  .focus-mode .writer-format-group label{gap:3px;font-size:7px}
+  .focus-mode .writer-format-group select{max-width:90px;height:29px;padding:0 5px;font-size:9px}
+  .focus-mode .writer-layout-group{width:100%;justify-content:center}
+  .focus-mode .chapter-title-input{font-size:26px!important;min-height:38px!important}
+  .focus-mode .editor-meta{font-size:9px!important}
+  .focus-mode .chapter-blocks-editor{width:calc(100vw - 24px)!important;max-width:calc(100vw - 24px)!important;min-height:260px!important;padding:24px 20px!important}
+  .focus-mode .writer-rich-canvas{font-size:18px!important;line-height:1.78!important}
+  .focus-mode .editor-footer{width:calc(100vw - 24px)!important}
+  .focus-mode .editor-footer .button{min-width:0;width:auto}
+}
+@media(max-height:680px) and (min-width:681px){
+  .focus-mode .chapter-editor{gap:6px!important;padding-block:8px!important}
+  .focus-mode .chapter-title-input{min-height:34px!important;font-size:27px!important}
+  .focus-mode .focus-width-controls{min-height:30px}
+  .focus-mode .chapter-blocks-editor{min-height:220px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .focus-mode .chapter-blocks-editor{transition:none!important}
+}
+
+/* Book reader polish: a real central gutter, balanced leaves and quiet furniture. */
+.reader-page{width:100%;max-width:1440px;margin-inline:auto}
+.reader-toolbar{max-width:1040px;margin:0 auto 4px}
+.reader-book{
+  grid-column:2/12;
+  padding:15px 16px 0!important;
+  overflow:hidden!important;
+  border:1px solid #d7c7b3!important;
+  border-radius:9px!important;
+  background:
+    linear-gradient(135deg,#84664e 0%,#61473a 45%,#4a3731 100%)!important;
+  box-shadow:0 30px 80px rgba(49,34,24,.2),0 3px 12px rgba(49,34,24,.08)!important;
+}
+.reader-running-head{
+  position:relative;
+  padding:10px 16px 13px!important;
+  border-bottom:1px solid rgba(249,240,225,.2)!important;
+  color:#f1e4d2!important;
+  font-size:9px!important;
+  letter-spacing:.14em!important;
+}
+.reader-spread{
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+  border-radius:2px;
+  background:#f6efe4;
+}
+.reader-spread::before{
+  content:"";
+  position:absolute;
+  z-index:3;
+  top:0;bottom:0;left:50%;
+  width:32px;
+  transform:translateX(-50%);
+  pointer-events:none;
+  background:linear-gradient(90deg,rgba(65,46,33,.02),rgba(65,46,33,.11) 48%,rgba(255,255,255,.48) 50%,rgba(65,46,33,.10) 53%,rgba(65,46,33,.02));
+}
+.reader-page-sheet{
+  padding:clamp(28px,4vw,58px) clamp(25px,4.4vw,70px) 34px!important;
+  background-color:#fffdf7!important;
+  background-image:linear-gradient(90deg,rgba(116,88,59,.025),transparent 35px),radial-gradient(ellipse at 50% 0%,#fff 0%,transparent 65%)!important;
+}
+.reader-page-sheet.page-left{
+  background-image:linear-gradient(90deg,#f4ecdf 0,#fffdf7 22px,transparent 22px),radial-gradient(ellipse at 50% 0%,#fff 0%,transparent 65%)!important;
+}
+.reader-page-sheet.page-right{
+  background-image:linear-gradient(270deg,#f3ebdf 0,#fffdf7 22px,transparent 22px),radial-gradient(ellipse at 50% 0%,#fff 0%,transparent 65%)!important;
+}
+.reader-page-prose{
+  max-width:100%;
+  font-family:var(--studio-book-font)!important;
+  font-size:clamp(15px,1.15vw,18px)!important;
+  line-height:1.92!important;
+  color:#493b31!important;
+  text-align:justify;
+  hyphens:auto;
+}
+.reader-page-kicker{font-size:8px;letter-spacing:.17em;color:#a78e73}
+.reader-page-number{font-family:var(--studio-book-font);font-size:11px;color:#a18b72}
+.reader-controls{
+  margin:0 -16px!important;
+  padding:14px 24px!important;
+  background:#f5eee4!important;
+  border-top:1px solid #dfd0bd!important;
+}
+.reader-controls .button{min-width:112px}
+.reader-layout-single .reader-spread{border-radius:3px}
+.reader-layout-single .reader-page-sheet.page-left{box-shadow:0 0 28px rgba(70,49,31,.08)}
+.reader-layout-scroll .reader-scroll-sheet{box-shadow:inset 0 0 0 1px #efe4d6}
+.reader-scroll-sheet{background-color:#fffdf7}
+@media(max-width:760px){
+  .reader-book{grid-column:1/-1;padding:10px 10px 0!important}
+  .reader-spread::before{display:none}
+  .reader-page-sheet{padding:26px 23px 28px!important}
+  .reader-controls{margin-inline:-10px!important;padding:12px 10px!important}
+  .reader-controls .button{min-width:0}
+}
+@media(max-width:420px){
+  .reader-controls span{font-size:8px}
+  .reader-controls .button{font-size:9px;padding:8px}
+}
+
+/* Global finishing: consistent radii, readable labels and softer navigation. */
+.topbar{position:relative;z-index:20}
+.topbar .brand{font-size:12px}
+.account .button{min-height:34px;padding:8px 12px}
+.workspace-main,.workspace-sidebar,.author-card,.login-panel{box-shadow:0 12px 36px rgba(57,41,28,.055)}
+.sidebar-heading h2,.chapter-sidebar-title h3{letter-spacing:-.015em}
+.chapter-nav-item strong,.story-nav-item strong{line-height:1.25}
+input,textarea,select{font-size:13px}
+@media(max-width:680px){
+  .workspace-content{width:calc(100% - 20px)}
+  .account{gap:4px}
+  .account .text-button{font-size:9px;padding:5px 3px}
+  .topbar{height:auto;min-height:62px;padding-block:10px;gap:10px}
+}

@@ -246,6 +246,12 @@ export default function App() {
 
   useEffect(() => {
     if (!focusMode) return;
+    document.documentElement.classList.add('writing-studio-active');
+    return () => document.documentElement.classList.remove('writing-studio-active');
+  }, [focusMode]);
+
+  useEffect(() => {
+    if (!focusMode) return;
     const onKeyDown = event => {
       if (event.key === 'Escape') exitWritingStudio();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
@@ -757,7 +763,7 @@ export default function App() {
                         <label>PUNTO <select value={writingSize} onChange={e=>setWritingSize(e.target.value)}><option value="17">17</option><option value="18">18</option><option value="20">20</option><option value="22">22</option><option value="24">24</option></select></label>
                         <label>SATIR <select value={writingLineHeight} onChange={e=>setWritingLineHeight(e.target.value)}><option value="1.6">Sıkı</option><option value="1.8">Normal</option><option value="1.95">Rahat</option><option value="2.1">Geniş</option></select></label>
                       </div>
-                      <div className="writer-layout-group"><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Word sayfası</button></div>
+                      <div className="writer-layout-group"><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Word</button><button type="button" className={writingWidth === 'book' ? 'active' : ''} onClick={() => setWritingWidth('book')}>Kitap</button></div>
                       <span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime</span>
                     </div>}
                     <input className="chapter-title-input" required maxLength={120} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı" placeholder="Bölüm başlığı"/>
@@ -773,7 +779,7 @@ export default function App() {
                         aria-label="Hikâye metni"
                         aria-multiline="true"
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
-                        style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
+                        style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'Literata', 'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
                         onInput={e=>{setEditorContent(e.currentTarget.innerText.replace(/\r/g,'').replace(/\u00a0/g,' '));setEditorDirty(true);}}
                       >
                         {editorBlocks.map((block,index)=><p key={block.id || 'legacy-'+index} data-block-id={block.id || ''}>{block.content || <br/>}</p>)}

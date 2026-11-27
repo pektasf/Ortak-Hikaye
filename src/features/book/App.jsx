@@ -133,8 +133,21 @@ export default function App() {
       setActiveChapterId('');
       return;
     }
+    setChapters([]);
+    setActiveChapterId('');
     refreshChapters(activeStoryId);
   }, [activeStoryId, authorized]);
+
+  useEffect(() => {
+    if (!authorized || !userId || !activeStoryId || !activeChapterId) return;
+    const chapter = chapters.find(item => item.id === activeChapterId);
+    if (!chapter || chapter.story_id !== activeStoryId) return;
+    supabase.from('reading_progress').upsert({
+      user_id: userId, story_id: activeStoryId, chapter_id: activeChapterId, scroll_position: 0
+    }, { onConflict: 'user_id,story_id' }).then(({ error }) => {
+      if (error) setNotice('Okuma konumu kaydedilemedi: ' + error.message);
+    });
+  }, [activeChapterId, activeStoryId, authorized, userId, chapters]);
 
   useEffect(() => {
     if (!activeChapter || editorDirty) return;
@@ -258,9 +271,7 @@ export default function App() {
     setEditorStatus(chapter.status || 'draft');
     setEditorDirty(false);
     setShowRevisions(false);
-    await supabase.from('reading_progress').upsert({
-      user_id: userId, story_id: chapter.story_id, chapter_id: chapter.id, scroll_position: 0
-    }, { onConflict: 'user_id,story_id' });
+
   }
 
   async function deleteChapter() {

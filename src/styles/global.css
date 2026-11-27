@@ -960,3 +960,5 @@ input,textarea,select{font-size:13px}
 .story-theme-callout p{margin:3px 0 0!important;color:#5f4b3a!important;font-size:12px!important;white-space:pre-wrap}
 .new-story .story-create-limit input{font-size:11px}
 @media(max-width:680px){.story-settings-grid{grid-template-columns:1fr}.story-settings-footer{align-items:stretch;flex-direction:column}.story-settings-footer .button{width:100%}}
+
+.chapter-word-limit-label{display:inline-flex;align-items:center;gap:5px;color:#8d7967;font-size:11px;padding:4px 8px;border:1px solid #e8ded1;border-radius:6px;background:#faf7f1}

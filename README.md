@@ -13,6 +13,10 @@ Davet bağlantısıyla katılım sağlayan yazarların ortak bir hikâye oluştu
 - Hosting: **Ücretsiz katman**
 - Tasarım: **Hybrid** — klasik kitap okuma estetiği + modern yönetim arayüzü
 
+## Ürün yol haritası
+
+Ürün kararları, kitap/hikâye/bölüm yapısı ve geliştirme aşamaları: [docs/PRODUCT_ROADMAP.md](docs/PRODUCT_ROADMAP.md).
+
 ## Hızlı kurulum
 Yayın, Supabase ve GitHub Actions yapılandırmasına ihtiyaç duyar. Adım adım yönerge: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 

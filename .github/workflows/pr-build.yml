@@ -29,6 +29,8 @@ jobs:
           test -n "$VITE_SUPABASE_ANON_KEY" || (echo "Missing VITE_SUPABASE_ANON_KEY repository secret" && exit 1)
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Run unit tests
+        run: npm test
       - name: Build production site
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

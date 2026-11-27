@@ -73,7 +73,7 @@ function readWriterCanvasBlocks(root, userId) {
 }
 
 function measureBookPages(value, element) {
- const paragraphs=String(value||'').split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);
+ const paragraphs=String(value||'').split(/\r?\n+/).map(x=>x.trim()).filter(Boolean);
  if(!paragraphs.length||!element||!element.clientWidth||!element.clientHeight)return [];
  const probe=element.cloneNode(false),rect=element.getBoundingClientRect();
  Object.assign(probe.style,{position:'fixed',left:'-10000px',top:'0',visibility:'hidden',display:'block',width:rect.width+'px',height:element.clientHeight+'px',overflow:'hidden',contain:'layout style paint',pointerEvents:'none'});
@@ -178,6 +178,7 @@ export default function App() {
   // Unsaved edits stay private because only chapters.content (the last saved version) is rendered here.
   const readerChapters = chapters.filter(item => writingPresenceReady && String(item.content || '').trim().length > 0);
   const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
+  const readerParagraphs = readerParagraphBlocks.length ? readerParagraphBlocks : String(readerChapter?.content || '').split(/\r?\n+/).map(content => ({ id: null, content: content.trim(), author_name: 'Yazar bilgisi bulunamadı' })).filter(item => item.content);
   const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
   const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;
   useEffect(()=>{if(view!=='reader'||effectiveReaderLayout==='scroll')return;setReaderPages([]);let frame=0;const measure=()=>{window.cancelAnimationFrame(frame);frame=window.requestAnimationFrame(()=>setReaderPages(measureBookPages(readerChapter?.content||'',readerPageMeasureRef.current)));};measure();const el=readerPageMeasureRef.current;const observer=typeof ResizeObserver!=='undefined'&&el?new ResizeObserver(measure):null;if(observer&&el)observer.observe(el);window.addEventListener('resize',measure,{passive:true});document.fonts?.ready?.then(measure);return()=>{window.cancelAnimationFrame(frame);observer?.disconnect();window.removeEventListener('resize',measure);};},[view,readerChapter?.id,readerChapter?.content,effectiveReaderLayout]);
@@ -294,11 +295,13 @@ export default function App() {
         return;
       }
       const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name]));
-      setReaderParagraphBlocks((blocks || []).map(block => ({
-        id: block.id,
-        content: String(block.content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').trim(),
-        author_name: names[block.author_id] || (block.author_id ? 'Yazar' : 'Yazar bilgisi yok')
-      })));
+      setReaderParagraphBlocks((blocks || []).flatMap(block => (
+        String(block.content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').split(/\n+/).map(content => ({
+          id: block.id,
+          content: content.trim(),
+          author_name: names[block.author_id] || (block.author_id ? 'Yazar' : 'Yazar bilgisi yok')
+        })).filter(item => item.content)
+      )));
     });
     supabase.from('chapter_sentence_highlights')
       .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
@@ -1107,16 +1110,16 @@ export default function App() {
             </section>
             {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Henüz okunabilir kayıtlı metin yok.</h2><p>Yazarlar metinlerini kaydettikçe yayın öncesinde de burada birlikte okuyabilirsiniz.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
               <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')} · {readerChapter.status==='published'?'YAYINDA':'ÇALIŞMA NÜSHASI · YAYINLANMADI'}</span><h1>{readerChapter.title}</h1>
-              <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;const block=readerParagraphBlocks.find(item=>item.content===normalized);return <p key={index} data-block-id={block?.id || undefined} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
+              <div className="reader-prose">{readerParagraphs.map((paragraph,index)=><div className="reader-attributed-paragraph" key={(paragraph.id||'legacy')+'-'+index}><p data-block-id={paragraph.id || undefined}>{renderReaderHighlightedText(paragraph.content, sentenceHighlights)}</p><small className="reader-paragraph-author">Yazan: {paragraph.author_name}</small></div>)}</div>
             </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
               <article className="reader-page-sheet page-left">
                 <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}{readerChapter.status!=='published'?' · ÇALIŞMA NÜSHASI':''}</span>
-                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;const block=readerParagraphBlocks.find(item=>item.content===normalized);return <p key={index} data-block-id={block?.id || undefined} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
+                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const block=readerParagraphBlocks.find(item=>item.content===normalized);return <div className="reader-attributed-paragraph" key={index}><p data-block-id={block?.id || undefined}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p><small className="reader-paragraph-author">Yazan: {block?.author_name || 'Yazar bilgisi bulunamadı'}</small></div>;})}</div>
                 <span className="reader-page-number">{readerPageIndex+1}</span>
               </article>
               <article className="reader-page-sheet page-right">
                 <span className="reader-page-kicker">{readerChapter.title}</span>
-                <div className="reader-page-prose">{(readerPages[readerPageIndex+1] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;const block=readerParagraphBlocks.find(item=>item.content===normalized);return <p key={index} data-block-id={block?.id || undefined} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
+                <div className="reader-page-prose">{(readerPages[readerPageIndex+1] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const block=readerParagraphBlocks.find(item=>item.content===normalized);return <div className="reader-attributed-paragraph" key={index}><p data-block-id={block?.id || undefined}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p><small className="reader-paragraph-author">Yazan: {block?.author_name || 'Yazar bilgisi bulunamadı'}</small></div>;})}</div>
                 <span className="reader-page-number">{Math.min(readerPageIndex+2,readerPages.length)}</span>
               </article>
               {readerTurn && <div className={'page-flip-overlay ' + readerTurn}><div className="page-flip-front"><span>{readerChapter.title}</span><p>{(readerPages[readerTurn==='forward'?readerPageIndex+1:readerPageIndex] || '').slice(0,450)}</p></div><div className="page-flip-back"></div></div>}

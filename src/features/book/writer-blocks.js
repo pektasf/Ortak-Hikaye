@@ -76,8 +76,18 @@ export function mergeProtectedBlocksForDraft(candidateBlocks = [], originalBlock
     return { ...block, author_id: original?.author_id || userId, updated_by: userId };
   });
   const present = new Set(merged.filter(block => block.id).map(block => block.id));
-  for (const original of originalBlocks) {
-    if (original.id && original.author_id !== userId && !present.has(original.id)) merged.push({ ...original });
-  }
+  originalBlocks.forEach((original, originalIndex) => {
+    if (!original.id || original.author_id === userId || present.has(original.id)) return;
+    const nextProtected = originalBlocks.slice(originalIndex + 1)
+      .find(item => item.id && item.author_id !== userId && present.has(item.id));
+    const previousProtected = [...originalBlocks.slice(0, originalIndex)].reverse()
+      .find(item => item.id && item.author_id !== userId && present.has(item.id));
+    let insertAt = nextProtected ? merged.findIndex(item => item.id === nextProtected.id)
+      : previousProtected ? merged.findIndex(item => item.id === previousProtected.id) + 1
+      : Math.min(originalIndex, merged.length);
+    if (insertAt < 0) insertAt = merged.length;
+    merged.splice(insertAt, 0, { ...original });
+    present.add(original.id);
+  });
   return merged;
 }

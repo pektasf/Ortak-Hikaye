@@ -110,7 +110,7 @@ export default function App() {
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [stories, setStories] = useState([]);
-  const [activeStoryId, setActiveStoryId] = useState('');
+  const [activeStoryId, setActiveStoryId] = useState(() => { try { return window.localStorage.getItem('ortak_roman_active_story') || ''; } catch { return ''; } });
   const [storyTitleDraft, setStoryTitleDraft] = useState('');
   const [storyTitleBusy, setStoryTitleBusy] = useState(false);
   const [readerAuthors, setReaderAuthors] = useState([]);
@@ -121,6 +121,7 @@ export default function App() {
   const [editorBlocks, setEditorBlocks] = useState([]);
   const [sentenceHighlights, setSentenceHighlights] = useState([]);
   const [readerParagraphBlocks, setReaderParagraphBlocks] = useState([]);
+  const [readerSelectedSentence, setReaderSelectedSentence] = useState(null);
   const [selectedSentence, setSelectedSentence] = useState(null);
   const [editorStatus, setEditorStatus] = useState('draft');
   const [editorDirty, setEditorDirty] = useState(false);
@@ -145,7 +146,7 @@ export default function App() {
   const [writingPresenceReady, setWritingPresenceReady] = useState(false);
   const [loadingChapterContent, setLoadingChapterContent] = useState(false);
   const [lockNotice, setLockNotice] = useState('');
-  const [view, setView] = useState('home');
+  const [view, setView] = useState(() => { try { const saved = window.localStorage.getItem('ortak_roman_view'); return ['home','workspace','reader','discover','profile'].includes(saved) ? saved : 'home'; } catch { return 'home'; } });
   const [writingFont, setWritingFont] = useState('serif');
   const [writingSize, setWritingSize] = useState('20');
   const [writingLineHeight, setWritingLineHeight] = useState('1.9');
@@ -294,6 +295,7 @@ export default function App() {
       }
       const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name]));
       setReaderParagraphBlocks((blocks || []).map(block => ({
+        id: block.id,
         content: String(block.content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').trim(),
         author_name: names[block.author_id] || (block.author_id ? 'Yazar' : 'Yazar bilgisi yok')
       })));
@@ -369,7 +371,11 @@ export default function App() {
     if (storyResult.error) setNotice('Hikâyeler yüklenemedi: ' + storyResult.error.message);
     else {
       setStories(storyResult.data || []);
-      setActiveStoryId(current => (storyResult.data || []).some(item => item.id === current) ? current : (storyResult.data?.[0]?.id || ''));
+      setActiveStoryId(current => {
+        let savedStory = current;
+        if (!savedStory) { try { savedStory = window.localStorage.getItem('ortak_roman_active_story') || ''; } catch {} }
+        return (storyResult.data || []).some(item => item.id === savedStory) ? savedStory : (storyResult.data?.[0]?.id || '');
+      });
     }
   }
 
@@ -532,6 +538,13 @@ export default function App() {
   useEffect(()=>{if(!activeChapter||!userId||!editorDirty)return;if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);setDraftSaveState('pending');draftSaveTimerRef.current=window.setTimeout(async()=>{const localKey='ortak_roman_draft:'+userId+':'+activeChapter.id;const canvas=document.querySelector('.writer-rich-canvas');const currentBlocks=canvas?readWriterCanvasBlocks(canvas,userId):editorBlocks;const blocks=currentBlocks.map(block=>({id:block.id||null,content:block.content,author_id:block.author_id||userId}));const updatedAt=new Date().toISOString();const draft={title:editorTitle,status:editorStatus,blocks,updated_at:updatedAt};try{window.localStorage.setItem(localKey,JSON.stringify(draft));}catch{setDraftSaveState('device-error');}const {error}=await supabase.from('chapter_drafts').upsert({chapter_id:activeChapter.id,user_id:userId,title:editorTitle.trim()||activeChapter.title,status:editorStatus,blocks,updated_at:updatedAt},{onConflict:'chapter_id,user_id'});setDraftSaveState(error?'device-only':'saved');if(error)setNotice('Taslak cihazda korundu; sunucuya eşitlenemedi: '+error.message);},1000);return()=>{if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);};},[activeChapter?.id,userId,editorDirty,editorTitle,editorStatus,editorBlocks,editorContent]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem('ortak_roman_view', view);
+      if (activeStoryId) window.localStorage.setItem('ortak_roman_active_story', activeStoryId);
+    } catch {}
+  }, [view, activeStoryId]);
+
+  useEffect(() => {
     if (activeStory) setStoryTitleDraft(activeStory.title || '');
   }, [activeStory?.id, activeStory?.title]);
 
@@ -617,32 +630,40 @@ export default function App() {
   function captureSentenceSelection() {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) {
-      setSelectedSentence(null);
+      if (view === 'reader') setReaderSelectedSentence(null);
+      else setSelectedSentence(null);
       return;
     }
     const range = selection.getRangeAt(0);
-    const canvas = document.querySelector('.writer-rich-canvas');
+    const elementFor = node => node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    const inReader = view === 'reader';
+    const canvas = document.querySelector(inReader ? '.reader-prose, .reader-page-prose' : '.writer-rich-canvas');
     if (!canvas || !canvas.contains(range.commonAncestorContainer)) {
-      setSelectedSentence(null);
+      if (inReader) setReaderSelectedSentence(null);
+      else setSelectedSentence(null);
       return;
     }
-    const elementFor = node => node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-    const startParagraph = elementFor(range.startContainer)?.closest('p[data-block-id]');
-    const endParagraph = elementFor(range.endContainer)?.closest('p[data-block-id]');
+    const startParagraph = elementFor(range.startContainer)?.closest('p' + (inReader ? '[data-block-id]' : '[data-block-id]'));
+    const endParagraph = elementFor(range.endContainer)?.closest('p' + (inReader ? '[data-block-id]' : '[data-block-id]'));
     if (!startParagraph || startParagraph !== endParagraph) {
-      setSelectedSentence(null);
+      if (inReader) setReaderSelectedSentence(null);
+      else setSelectedSentence(null);
       return;
     }
     const blockId = startParagraph.getAttribute('data-block-id');
     if (!blockId) {
-      setSelectedSentence(null);
-      setNotice('Önce bölümü kaydet; ardından bu paragraftaki cümleyi vurgulayabilirsin.');
+      if (inReader) setReaderSelectedSentence(null);
+      else {
+        setSelectedSentence(null);
+        setNotice('Önce bölümü kaydet; ardından bu paragraftaki cümleyi vurgulayabilirsin.');
+      }
       return;
     }
     const rawText = range.toString();
     const sentence = rawText.trim();
     if (!sentence || sentence.length > 2000) {
-      setSelectedSentence(null);
+      if (inReader) setReaderSelectedSentence(null);
+      else setSelectedSentence(null);
       return;
     }
     const leading = rawText.length - rawText.trimStart().length;
@@ -650,13 +671,15 @@ export default function App() {
     prefix.selectNodeContents(startParagraph);
     prefix.setEnd(range.startContainer, range.startOffset);
     const startOffset = prefix.toString().length + leading;
-    setSelectedSentence({
-      chapter_id: activeChapterId,
+    const payload = {
+      chapter_id: inReader ? readerChapter?.id : activeChapterId,
       block_id: blockId,
       sentence_text: sentence,
       start_offset: startOffset,
       end_offset: startOffset + sentence.length
-    });
+    };
+    if (inReader) setReaderSelectedSentence(payload);
+    else setSelectedSentence(payload);
   }
 
   async function addSentenceHighlight() {
@@ -675,6 +698,23 @@ export default function App() {
     setSelectedSentence(null);
     window.getSelection()?.removeAllRanges();
     setNotice('Cümlenin altı çizildi ve yazar profiline eklendi.');
+  }
+
+  async function addReaderSentenceHighlight() {
+    if (!readerSelectedSentence || !readerChapter?.id || readerSelectedSentence.chapter_id !== readerChapter.id) return;
+    const { data, error } = await supabase
+      .from('chapter_sentence_highlights')
+      .insert({ ...readerSelectedSentence, author_id: userId })
+      .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
+      .single();
+    if (error) {
+      setNotice(error.code === '23505' ? 'Bu cümle zaten altı çizili.' : 'Cümlenin altı çizilemedi: ' + error.message);
+      return;
+    }
+    setSentenceHighlights(items => [...items, data]);
+    setReaderSelectedSentence(null);
+    window.getSelection()?.removeAllRanges();
+    setNotice('Seçtiğin cümlenin altı çizildi.');
   }
 
   async function openProfile(targetId) {
@@ -1047,6 +1087,10 @@ export default function App() {
           <div className="reader-toolbar">
             <label>BÖLÜM <select value={readerChapter?.id || ''} onChange={e=>{const index=readerChapters.findIndex(item=>item.id===e.target.value);setReadingIndex(Math.max(0,index));setReaderPageIndex(0);}}>{readerChapters.map((chapter,index)=><option key={chapter.id} value={chapter.id}>{String(index+1).padStart(2,'0')} · {chapter.title}{chapter.status==='published'?'':' · Çalışma nüshası'}</option>)}</select></label>
             <label>OKUMA DÜZENİ <select value={readerLayout} onChange={e=>{setReaderLayout(e.target.value);setReaderPageIndex(0);setReaderTurn(null);}}><option value="spread">Açık kitap · iki sayfa</option><option value="single">Tek sayfa</option><option value="scroll">Kesintisiz kaydırma</option></select></label>
+            <div className="sentence-highlight-actions reader-highlight-actions">
+              <button type="button" className="sentence-highlight-button" disabled={!readerSelectedSentence} onMouseDown={e=>e.preventDefault()} onClick={addReaderSentenceHighlight}>↗ Cümlenin altını çiz</button>
+              <span>{readerSelectedSentence ? 'Seçilen cümle hazır' : 'Önce bir cümle seç'}</span>
+            </div>
             {isCompactReader && readerLayout === 'spread' && <small className="reader-responsive-note">Mobil ekranda rahat okuma için tek sayfa gösteriliyor.</small>}
           </div>
           <div className={'reader-book reader-layout-' + effectiveReaderLayout}>
@@ -1057,16 +1101,16 @@ export default function App() {
             </section>
             {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Henüz okunabilir kayıtlı metin yok.</h2><p>Yazarlar metinlerini kaydettikçe yayın öncesinde de burada birlikte okuyabilirsiniz.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
               <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')} · {readerChapter.status==='published'?'YAYINDA':'ÇALIŞMA NÜSHASI · YAYINLANMADI'}</span><h1>{readerChapter.title}</h1>
-              <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;return <p key={index} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
+              <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;const block=readerParagraphBlocks.find(item=>item.content===normalized);return <p key={index} data-block-id={block?.id || undefined} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
             </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
               <article className="reader-page-sheet page-left">
                 <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}{readerChapter.status!=='published'?' · ÇALIŞMA NÜSHASI':''}</span>
-                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;return <p key={index} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
+                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;const block=readerParagraphBlocks.find(item=>item.content===normalized);return <p key={index} data-block-id={block?.id || undefined} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
                 <span className="reader-page-number">{readerPageIndex+1}</span>
               </article>
               <article className="reader-page-sheet page-right">
                 <span className="reader-page-kicker">{readerChapter.title}</span>
-                <div className="reader-page-prose">{(readerPages[readerPageIndex+1] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;return <p key={index} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
+                <div className="reader-page-prose">{(readerPages[readerPageIndex+1] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const author=readerParagraphBlocks.find(block=>block.content===normalized)?.author_name;const block=readerParagraphBlocks.find(item=>item.content===normalized);return <p key={index} data-block-id={block?.id || undefined} title={author?'Yazar: '+author:'Yazar bilgisi bulunamadı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</p>;})}</div>
                 <span className="reader-page-number">{Math.min(readerPageIndex+2,readerPages.length)}</span>
               </article>
               {readerTurn && <div className={'page-flip-overlay ' + readerTurn}><div className="page-flip-front"><span>{readerChapter.title}</span><p>{(readerPages[readerTurn==='forward'?readerPageIndex+1:readerPageIndex] || '').slice(0,450)}</p></div><div className="page-flip-back"></div></div>}

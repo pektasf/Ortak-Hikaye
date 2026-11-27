@@ -449,7 +449,7 @@ export default function App() {
         if (id) usedIds.add(id);
         return {
           id,
-          content: String(node.innerText || node.textContent || '').replace(/\\r/g, '').replace(/\\u00a0/g, ' ').trimEnd()
+          content: String(node.innerText || node.textContent || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').trimEnd()
         };
       }).filter(block => block.content.trim());
     }
@@ -774,7 +774,7 @@ export default function App() {
                         aria-multiline="true"
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
                         style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
-                        onInput={e=>{setEditorContent(e.currentTarget.innerText.replace(/\\r/g,'').replace(/\\u00a0/g,' '));setEditorDirty(true);}}
+                        onInput={e=>{setEditorContent(e.currentTarget.innerText.replace(/\r/g,'').replace(/\u00a0/g,' '));setEditorDirty(true);}}
                       >
                         {editorBlocks.map((block,index)=><p key={block.id || 'legacy-'+index} data-block-id={block.id || ''}>{block.content || <br/>}</p>)}
                       </div> : <>

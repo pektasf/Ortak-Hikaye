@@ -99,6 +99,6 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [x] Bölüm metnini paragraf bloklarına ayıran veri modeli
 - [x] Yeni paragrafın ilk yazarını ve son düzenleyeni ayrı kaydetme
 - [x] Eski bölüm metinlerini yazarı bilinmeyen arşiv blokları olarak koruma
-- [ ] Paragraf katkı geçmişini ve kelime istatistiklerini profil sayfasında gösterme
+- [x] Paragraf katkı sayısı ve ilk yazar bazlı kelime istatistiklerini profil sayfasında gösterme
 - [ ] Paragraf silme/geri alma geçmişini görünür kılma
 - [ ] Eşzamanlı düzenlemede çakışma kontrolü

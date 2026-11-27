@@ -475,13 +475,15 @@ export default function App() {
             <article><strong>{profile?.stats?.stories_created ?? 0}</strong><span>Hikâye başlattı</span></article>
             <article><strong>{profile?.stats?.stories_joined ?? 0}</strong><span>Hikâyeye katıldı</span></article>
             <article><strong>{profile?.stats?.chapters_written ?? 0}</strong><span>Bölüm oluşturdu</span></article>
-            <article><strong>{Number(profile?.stats?.words_in_started_chapters || 0).toLocaleString('tr-TR')}</strong><span>Başlattığı bölümlerdeki kelime</span></article>
+            <article><strong>{Number(profile?.stats?.words_authored_current || 0).toLocaleString('tr-TR')}</strong><span>Yazdığı paragraflardaki kelime</span></article>
+            <article><strong>{profile?.stats?.paragraphs_written ?? 0}</strong><span>Yazdığı paragraf</span></article>
+            <article><strong>{profile?.stats?.paragraphs_last_edited ?? 0}</strong><span>Başkasının paragrafına katkı</span></article>
             <article><strong>{profile?.stats?.writers_invited ?? 0}</strong><span>Davetle katılan yazar</span></article>
             <article><strong>{profile?.stats?.invite_links_created ?? 0}</strong><span>Davet bağlantısı oluşturdu</span></article>
             <article><strong>{profile?.stats?.chapter_edits ?? 0}</strong><span>Bölüm düzenlemesi</span></article>
             <article className="profile-stat-upcoming"><strong>Yakında</strong><span>Altı çizilen cümleler</span></article>
           </div>
-          <p className="profile-stat-note">Kelime sayısı, yazarın ilk oluşturduğu bölümlerin güncel metnini gösterir; ortak düzenlemelerde kişisel kelime katkısını henüz ayrı hesaplamaz. Cümle vurguları henüz kullanıma açılmadı.</p>
+          <p className="profile-stat-note">Kelime sayısı, ilk yazarı olduğun paragrafların güncel metninden hesaplanır; paragrafı sonradan düzenleyen kişinin eklediği veya çıkardığı kelimeler ayrı hesaplanmaz. Eski metinlerin yazarı bilinmediği için katkı istatistiklerine dahil edilmez. Cümle vurguları henüz kullanıma açılmadı.</p>
           <form className="profile-edit-card" onSubmit={saveProfile}>
             <div><span className="eyebrow">KİŞİSEL ALAN</span><h2>Profilini düzenle</h2><p>Diğer hikâye üyeleri adını ve kısa tanıtımını görebilir.</p></div>
             <label>Görünen ad<input required minLength={2} maxLength={40} value={profileForm.display_name} onChange={e => setProfileForm(v => ({...v,display_name:e.target.value}))}/></label>

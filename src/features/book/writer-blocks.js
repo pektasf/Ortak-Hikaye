@@ -16,7 +16,7 @@ export function readWriterCanvasBlocks(root, userId, existingBlocks = []) {
       id: existing ? existing.id : null,
       content,
       author_id: existing ? existing.author_id : userId,
-      updated_by: existing ? existing.updated_by : userId,
+      updated_by: existing && existing.author_id !== userId ? existing.updated_by : userId,
       ...(existing?.author_name ? { author_name: existing.author_name } : {}),
       ...(existing?.editor_name ? { editor_name: existing.editor_name } : {})
     });
@@ -34,7 +34,7 @@ export function readWriterCanvasBlocks(root, userId, existingBlocks = []) {
 }
 
 export function validateWriterBlockOwnership(candidateBlocks = [], originalBlocks = [], userId) {
-  const protectedBlocks = originalBlocks.filter(block => block.id && block.author_id && block.author_id !== userId);
+  const protectedBlocks = originalBlocks.filter(block => block.id && block.author_id !== userId);
   if (!protectedBlocks.length) return { valid: true, message: '' };
 
   const candidateById = new Map();
@@ -66,4 +66,18 @@ export function validateWriterBlockOwnership(candidateBlocks = [], originalBlock
     return { valid: false, message: 'Başka yazarlara ait paragrafların sırası değiştirilemez. Değişiklik kaydedilmedi.' };
   }
   return { valid: true, message: '' };
+}
+
+
+export function mergeProtectedBlocksForDraft(candidateBlocks = [], originalBlocks = [], userId) {
+  const merged = candidateBlocks.map(block => {
+    const original = block.id ? originalBlocks.find(item => item.id === block.id) : null;
+    if (original && original.author_id !== userId) return { ...original };
+    return { ...block, author_id: original?.author_id || userId, updated_by: userId };
+  });
+  const present = new Set(merged.filter(block => block.id).map(block => block.id));
+  for (const original of originalBlocks) {
+    if (original.id && original.author_id !== userId && !present.has(original.id)) merged.push({ ...original });
+  }
+  return merged;
 }

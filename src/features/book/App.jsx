@@ -197,10 +197,10 @@ export default function App() {
     event.preventDefault();
     if (!newStoryTitle.trim() || !book?.id) return;
     setStoryBusy(true);
-    const { data, error } = await supabase.from('stories').insert({
-      book_id: book.id, owner_id: userId, title: newStoryTitle.trim(),
-      description: newStoryDescription.trim(), status: 'published'
-    }).select().single();
+    const { data, error } = await supabase.rpc('create_story', {
+      p_book_id: book.id, p_title: newStoryTitle.trim(),
+      p_description: newStoryDescription.trim()
+    });
     if (error) setNotice('Hikâye oluşturulamadı: ' + error.message);
     else {
       setStories(items => [data, ...items]);

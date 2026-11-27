@@ -165,9 +165,16 @@ export default function App() {
 
   useEffect(() => {
     if (!activeChapter || editorDirty) return;
+    let cancelled = false;
     setEditorTitle(activeChapter.title);
-    setEditorContent(activeChapter.content || '');
     setEditorStatus(activeChapter.status || 'draft');
+    supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', activeChapter.id).order('position').then(({data,error}) => {
+      if (cancelled) return;
+      if (error) { setNotice('Paragraflar yüklenemedi: ' + error.message); return; }
+      setEditorBlocks(data || []);
+      setEditorContent((data || []).map(block => block.content).join('\\n\\n') || activeChapter.content || '');
+    });
+    return () => { cancelled = true; };
   }, [activeChapterId, activeChapter?.updated_at, editorDirty]);
 
   useEffect(() => {

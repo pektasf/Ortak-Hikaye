@@ -330,24 +330,30 @@ export default function App() {
     if (view !== 'reader' || !readerChapter?.id) return;
     let alive = true;
     setReaderParagraphBlocks([]);
+    setReaderAuthorAttribution(null);
     Promise.all([
-      supabase.from('chapter_blocks').select('id,content,author_id,position').eq('chapter_id', readerChapter.id).order('position'),
-      supabase.rpc('get_story_author_names', { p_chapter_id: readerChapter.id })
-    ]).then(([{ data: blocks, error: blocksError }, { data: authors, error: authorsError }]) => {
+      supabase.from('chapter_revisions').select('id,content,editor_id,created_at').eq('chapter_id', readerChapter.id).order('created_at', { ascending: true }),
+      supabase.from('chapter_blocks').select('id,content,author_id,position').eq('chapter_id', readerChapter.id).order('position')
+    ]).then(async ([{ data: revisionRows, error: revisionsError }, { data: blocks, error: blocksError }]) => {
       if (!alive) return;
-      if (blocksError || authorsError) {
-        setReaderParagraphBlocks([]);
-        setNotice('Paragraf yazarları yüklenemedi: ' + (blocksError || authorsError).message);
+      if (revisionsError || blocksError) {
+        setNotice('Yazar geçmişi yüklenemedi: ' + (revisionsError || blocksError).message);
         return;
       }
-      const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name]));
-      setReaderParagraphBlocks((blocks || []).flatMap(block => (
-        String(block.content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').split(/\n+/).map(content => ({
-          id: block.id,
-          content: content.trim(),
-          author_name: names[block.author_id] || (block.author_id ? 'Yazar' : 'Yazar bilgisi yok')
-        })).filter(item => item.content)
-      )));
+      const authorIds = [...new Set((revisionRows || []).map(item => item.editor_id).filter(Boolean))];
+      const { data: profiles, error: profilesError } = authorIds.length
+        ? await supabase.from('profiles').select('id,display_name').in('id', authorIds)
+        : { data: [], error: null };
+      if (!alive) return;
+      if (profilesError) {
+        setNotice('Yazar adları yüklenemedi: ' + profilesError.message);
+        return;
+      }
+      const names = Object.fromEntries((profiles || []).map(item => [item.id, item.display_name || 'Yazar']));
+      setReaderAuthorAttribution(buildRevisionAttribution(revisionRows || [], readerChapter.content || '', names));
+      setReaderParagraphBlocks(String(readerChapter.content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').split(/\n+/)
+        .map(content => ({ id: null, content: content.trim(), author_name: 'Revizyon geçmişinden eşleştiriliyor' }))
+        .filter(item => item.content));
     });
     supabase.from('chapter_sentence_highlights')
       .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')

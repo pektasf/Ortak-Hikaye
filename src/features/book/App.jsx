@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase/client.js';
 import { words } from '../../lib/text.js';
 import SetupScreen from '../../components/setup/SetupScreen.jsx';
 import '../../styles/global.css';
+import '../../styles/editorial-design.css';
 import '../../styles/reader-pagination.css';
 
 function renderHighlightedText(content, blockId, highlights) {
@@ -484,7 +485,7 @@ export default function App() {
     if (!supabase || !session || !authorized) return;
     const [bookResult, storyResult] = await Promise.all([
       supabase.from('books').select('*').limit(1).maybeSingle(),
-      supabase.from('stories').select('id,title,description,status,owner_id,target_words,created_at,updated_at').order('updated_at', { ascending: false })
+      supabase.from('stories').select('id,title,description,theme,status,owner_id,target_words,created_at,updated_at').order('updated_at', { ascending: false })
     ]);
     if (bookResult.error) setNotice('Kitap bilgisi yüklenemedi: ' + bookResult.error.message);
     else if (bookResult.data) setBook(bookResult.data);
@@ -1265,6 +1266,17 @@ export default function App() {
               <span className="reader-front-kicker">ORTAK ROMAN · BİRLİKTE YAZILAN BİR KİTAP</span>
               <div className="reader-front-cover"><span className="reader-front-symbol">✦</span><h1>{book?.title || 'Ortak Roman'}</h1>{book?.subtitle && <p className="reader-front-subtitle">{book.subtitle}</p>}<div className="reader-front-rule"/><h2>{activeStory?.title || 'Hikâye'}</h2>{book?.note && <p className="reader-front-description">{book.note}</p>}<div className="reader-front-authors"><small>YAZARLAR</small><strong>{readerAuthors.length ? readerAuthors.join(' · ') : 'Ortak yazarlar'}</strong></div><small className="reader-front-date">{chapters.some(item=>item.status==='published'&&String(item.content||'').trim()) ? 'YAYIN TARİHİ · ' + new Date(chapters.filter(item=>item.status==='published'&&String(item.content||'').trim()).sort((a,b)=>new Date(a.updated_at)-new Date(b.updated_at))[0].updated_at).toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'}) : 'OLUŞTURULMA TARİHİ · ' + (activeStory?.created_at ? new Date(activeStory.created_at).toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'}) : 'Tarih belirtilmedi')}</small></div>
             </section>
+            {readerChapters.length > 1 && <nav className="reader-toc" aria-label="Kitap içindekiler">
+              <span className="eyebrow">KİTAP İÇERİĞİ</span>
+              <h2>İçindekiler</h2>
+              <ol>{readerChapters.map((chapter,index)=><li key={chapter.id}>
+                <button type="button" className={index===readingIndex?'active':''} aria-current={index===readingIndex?'page':undefined} onClick={()=>{setReadingIndex(index);setReaderPageIndex(0);}}>
+                  <span className="reader-toc-number">{String(index+1).padStart(2,'0')}</span>
+                  <span className="reader-toc-title">{chapter.title}</span>
+                  <span className="reader-toc-status">{chapter.status==='published'?'Yayında':'Çalışma nüshası'}</span>
+                </button>
+              </li>)}</ol>
+            </nav>}
             {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Henüz okunabilir kayıtlı metin yok.</h2><p>Yazarlar metinlerini kaydettikçe yayın öncesinde de burada birlikte okuyabilirsiniz.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
               <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')} · {readerChapter.status==='published'?'YAYINDA':'ÇALIŞMA NÜSHASI · YAYINLANMADI'}</span><h1>{readerChapter.title}</h1>
               <div className="reader-prose">{readerParagraphs.map((paragraph,index)=><p className="reader-attributed-text" key={(paragraph.id||'legacy')+'-'+index}>{renderAttributedReaderText(paragraph.content, readerAuthorAttribution, sentenceHighlights)}</p>)}</div>
@@ -1288,9 +1300,9 @@ export default function App() {
             </div>
           </div>
         </section> : view === 'home' ? <section className="home-page">
-          <div className="home-welcome"><div><span className="eyebrow">KİTAPLIĞIN · YAZAR TOPLULUĞU</span><h1>Her kitabın<br/><em>bir başlangıcı</em> vardır.</h1><p>Bir hikâyeyi tek başına başlatabilir, başka yazarlarla birlikte büyütebilirsin.</p><div className="home-actions"><button className="button" onClick={()=>setView('workspace')}>Yazmaya devam et <span>→</span></button><button className="button light" onClick={()=>setView('reader')}>Kitabı oku</button></div></div><div className="home-book-object"><div className="home-book-spine"></div><div className="home-book-cover"><small>ORTAK ROMAN</small><span>✦</span><strong>{book?.title || 'Bir hikâye, birçok ses'}</strong><i>Birlikte yazılan hikâyeler</i></div></div></div>
-          <div className="home-section-head"><div><span className="eyebrow">SENİN KÜTÜPHANEN</span><h2>Hikâyelerine dön</h2></div><button className="text-button" onClick={()=>setView('workspace')}>Tüm hikâyeler →</button></div>
-          <div className="home-story-grid">{stories.slice(0,3).map((story,i)=><button className={'home-story-card cover-tone-'+i} key={story.id} onClick={()=>{setActiveStoryId(story.id);setView('workspace');}}><span>✦</span><strong>{story.title}</strong><small>{story.description || 'Birlikte yazılmayı bekleyen bir hikâye'}</small></button>)}{!stories.length&&<p className="empty-small">Henüz hikâyen yok. Çalışma alanından ilk hikâyeni oluştur.</p>}</div>
+          <div className="home-welcome"><div><span className="eyebrow">KİTAPLIĞIN · YAZAR TOPLULUĞU</span><h1>Her kitabın<br/><em>bir başlangıcı</em> vardır.</h1><p>Fikirlerini hikâyelere dönüştür; tek başına yaz veya başka yazarlarla birlikte büyüt.</p><div className="home-actions"><button className="button" onClick={()=>setView('workspace')}>{stories.length ? 'Çalışma alanına git' : 'İlk hikâyeni oluştur'} <span>→</span></button><button className="button light" onClick={()=>setView('reader')}>Kitabı oku</button></div></div><div className="home-book-object" aria-hidden="true"><div className="home-book-spine"></div><div className="home-book-cover"><small>ORTAK ROMAN</small><span>✦</span><strong>{book?.title || 'Bir hikâye, birçok ses'}</strong><i>Birlikte yazılan hikâyeler</i></div></div></div>
+          <div className="home-section-head"><div><span className="eyebrow">SENİN KÜTÜPHANEN</span><h2>Hikâyelerine dön</h2><p className="home-library-count">{stories.length} hikâye · {stories.filter(story=>story.owner_id===userId).length} tanesi sana ait</p></div><button className="text-button" onClick={()=>setView('workspace')}>Tüm hikâyeler →</button></div>
+          <div className="home-story-grid">{stories.slice(0,3).map((story,i)=><button className={'home-story-card cover-tone-'+i} key={story.id} aria-label={story.title+' hikâyesini aç'} onClick={()=>{setActiveStoryId(story.id);setView('workspace');}}><span className="home-story-symbol">✦</span><strong>{story.title}</strong><small>{story.description || 'Birlikte yazılmayı bekleyen bir hikâye'}</small><span className="home-story-owner">{story.owner_id===userId ? 'SENİN HİKÂYEN' : 'KATILDIĞIN HİKÂYE'}</span></button>)}{!stories.length&&<div className="home-library-empty"><span>✦</span><div><strong>Kitaplığın henüz boş.</strong><p>İlk hikâyeni başlatabilir veya bir davet bağlantısıyla başka bir hikâyeye katılabilirsin.</p></div><button className="button" onClick={()=>setView('workspace')}>Hikâye oluşturmaya başla →</button></div>}</div>
           <div className="home-community-strip"><div><span className="eyebrow">YAZAR TOPLULUĞU</span><h2>Yeni bir ses keşfet.</h2><p>Yazarları bul, takip et ve hikâyelerine davet et.</p></div><button className="button" onClick={()=>setView('discover')}>Yazarları keşfet →</button></div>
         </section> : <>
         <section className="workspace-heading">

@@ -1,11 +1,50 @@
-/* Ortak Roman design tokens — hybrid: literary book + restrained product UI */
+/* Ortak Roman — editorial design system */
 :root {
   color-scheme: light;
-  --color-ink: #30271e;
-  --color-paper: #f5eddd;
-  --color-paper-ui: #faf8f3;
-  --color-leather: #4b2c1e;
-  --color-accent: #98643b;
-  --font-reading: 'EB Garamond', Georgia, serif;
-  --font-ui: 'DM Sans', Arial, sans-serif;
+  --color-ink: #1c1b18;
+  --color-ink-soft: #49443b;
+  --color-paper: #faf9f1;
+  --color-paper-ui: #f3f0e4;
+  --color-paper-raised: #fffef9;
+  --color-leather: #38252a;
+  --color-accent: #c0613a;
+  --color-accent-hover: #a8512d;
+  --color-accent-soft: #f0dfd3;
+  --color-amber: #eba834;
+  --color-sage: #2e6f73;
+  --color-muted: #777267;
+  --color-line: #e5e1d3;
+  --color-success: #527765;
+  --color-danger: #a64f45;
+  --shadow-card: 0 10px 34px rgba(39, 31, 23, .055);
+  --shadow-floating: 0 24px 70px rgba(39, 31, 23, .15);
+  --radius-sm: 9px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --font-reading: 'Crimson Pro', Georgia, serif;
+  --font-ui: 'Plus Jakarta Sans', Arial, sans-serif;
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --content-width: 1240px;
+  --focus-ring: 0 0 0 3px rgba(192, 97, 58, .2);
+}
+html.dark {
+  color-scheme: dark;
+  --color-ink: #eae6df;
+  --color-ink-soft: #c8c1b7;
+  --color-paper: #12121a;
+  --color-paper-ui: #181823;
+  --color-paper-raised: #201f2b;
+  --color-leather: #29202a;
+  --color-accent: #d97348;
+  --color-accent-hover: #e18a61;
+  --color-accent-soft: #392a2c;
+  --color-amber: #eba834;
+  --color-sage: #66b2b5;
+  --color-muted: #a09bad;
+  --color-line: #2a2938;
+  --color-success: #83b49a;
+  --color-danger: #e18b80;
+  --shadow-card: 0 10px 34px rgba(0, 0, 0, .16);
+  --shadow-floating: 0 24px 70px rgba(0, 0, 0, .32);
 }

@@ -255,7 +255,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [focusMode]);
+  }, [focusMode, editorDirty]);
 
   useEffect(() => {
     if (!activeChapter || editorDirty) return;

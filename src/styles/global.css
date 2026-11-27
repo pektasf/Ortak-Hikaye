@@ -413,3 +413,8 @@ input,textarea,select{border-color:#dfd4c7;background:#fffefa;border-radius:7px;
 
 .focus-mode .chapter-editor{display:flex!important;flex-direction:column!important;gap:10px!important}
 .focus-mode .chapter-blocks-editor{flex:1 1 0!important}
+
+/* Keep the studio scroll confined to the paper while the app chrome remains out of sight. */
+.focus-mode .chapter-editor{min-width:0!important;overflow:hidden!important}
+.focus-mode .chapter-blocks-editor{min-width:0!important;max-width:100%!important}
+.focus-mode .chapter-block-input{max-width:100%!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important;word-wrap:break-word!important}

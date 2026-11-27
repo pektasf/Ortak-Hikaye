@@ -90,6 +90,9 @@ export default function App() {
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [stories, setStories] = useState([]);
   const [activeStoryId, setActiveStoryId] = useState('');
+  const [storyTitleDraft, setStoryTitleDraft] = useState('');
+  const [storyTitleBusy, setStoryTitleBusy] = useState(false);
+  const [readerAuthors, setReaderAuthors] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [activeChapterId, setActiveChapterId] = useState('');
   const [editorTitle, setEditorTitle] = useState('');
@@ -232,7 +235,7 @@ export default function App() {
     const {data:remoteDraft,error:draftError}=await supabase.from('chapter_drafts').select('title,status,blocks,updated_at').eq('chapter_id',chapterId).eq('user_id',userId).maybeSingle();
     if(draftError)setNotice('Taslak kontrol edilemedi: '+draftError.message);
     const newest=[remoteDraft,localDraft].filter(item=>item?.updated_at&&Array.isArray(item.blocks)).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at))[0];
-    if(newest&&new Date(newest.updated_at).getTime()>new Date(chapters.find(item=>item.id===chapterId)?.updated_at||0).getTime()&&!draftRestorePromptRef.current.has(chapterId)){draftRestorePromptRef.current.add(chapterId);if(window.confirm('Bu bölüm için daha yeni bir taslak bulundu. Taslağı geri yüklemek ister misin?')){setEditorTitle(newest.title||activeChapter?.title||'');setEditorStatus(newest.status||'draft');const restored=newest.blocks.map(item=>({...item,author_id:item.author_id||userId}));setEditorBlocks(restored);setEditorContent(restored.map(item=>item.content).join('\n\n'));setEditorDirty(true);}}
+    if(newest&&new Date(newest.updated_at).getTime()>new Date(chapters.find(item=>item.id===chapterId)?.updated_at||0).getTime()){setEditorTitle(newest.title||activeChapter?.title||'');setEditorStatus(newest.status||'draft');const restored=newest.blocks.map(item=>({...item,author_id:item.author_id||userId}));setEditorBlocks(restored);setEditorContent(restored.map(item=>item.content).join('\n\n'));setEditorDirty(true);}
     const { data: highlights, error: highlightError } = await supabase
       .from('chapter_sentence_highlights')
       .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
@@ -462,12 +465,29 @@ export default function App() {
   useEffect(()=>{if(!activeChapter||!userId||!editorDirty)return;if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);setDraftSaveState('pending');draftSaveTimerRef.current=window.setTimeout(async()=>{const localKey='ortak_roman_draft:'+userId+':'+activeChapter.id;const canvas=document.querySelector('.writer-rich-canvas');const currentBlocks=canvas?readWriterCanvasBlocks(canvas,userId):editorBlocks;const blocks=currentBlocks.map(block=>({id:block.id||null,content:block.content,author_id:block.author_id||userId}));const updatedAt=new Date().toISOString();const draft={title:editorTitle,status:editorStatus,blocks,updated_at:updatedAt};try{window.localStorage.setItem(localKey,JSON.stringify(draft));}catch{setDraftSaveState('device-error');}const {error}=await supabase.from('chapter_drafts').upsert({chapter_id:activeChapter.id,user_id:userId,title:editorTitle.trim()||activeChapter.title,status:editorStatus,blocks,updated_at:updatedAt},{onConflict:'chapter_id,user_id'});setDraftSaveState(error?'device-only':'saved');if(error)setNotice('Taslak cihazda korundu; sunucuya eşitlenemedi: '+error.message);},1000);return()=>{if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);};},[activeChapter?.id,userId,editorDirty,editorTitle,editorStatus,editorBlocks,editorContent]);
 
   useEffect(() => {
+    if (activeStory) setStoryTitleDraft(activeStory.title || '');
+  }, [activeStory?.id, activeStory?.title]);
+
+  useEffect(() => {
     if (!book || settingsDirty) return;
     setSettings({
       title: book.title || '', subtitle: book.subtitle || '', note: book.note || '',
       target_words: book.target_words || 1000, extension_words: book.extension_words || 1000
     });
   }, [book?.id, book?.title, book?.subtitle, book?.note, book?.target_words, book?.extension_words, settingsDirty]);
+
+  useEffect(() => {
+    if (view !== 'reader' || !activeStoryId) return;
+    const chapter = chapters.find(item => item.story_id === activeStoryId);
+    if (!chapter) { setReaderAuthors([]); return; }
+    let alive = true;
+    supabase.rpc('get_story_author_names', { p_chapter_id: chapter.id }).then(({data,error}) => {
+      if (!alive) return;
+      if (error) { setReaderAuthors([]); setNotice('Yazar bilgileri yüklenemedi: ' + error.message); }
+      else setReaderAuthors((data || []).map(item => item.display_name).filter(Boolean));
+    });
+    return () => { alive = false; };
+  }, [view, activeStoryId, chapters.map(item => item.id).join('|')]);
 
   useEffect(()=>{if(readerPageRestoreRef.current===null||!readerPages.length)return;setReaderPageIndex(Math.min(readerPageRestoreRef.current,readerMaxPageIndex));readerPageRestoreRef.current=null;},[readerPages.length,readerMaxPageIndex]);
   useEffect(()=>{if(view!=='reader'||effectiveReaderLayout!=='scroll'||!readerScrollRestore)return;const sheet=document.querySelector('.reader-scroll-sheet');if(sheet){sheet.scrollTop=readerScrollRestore;setReaderScrollRestore(0);}},[view,effectiveReaderLayout,readerChapter?.id,readerScrollRestore]);
@@ -740,8 +760,10 @@ export default function App() {
     if (error) setNotice('Bölüm kaydedilemedi: ' + error.message);
     else {
       setChapters(items => items.map(item => item.id === data.id ? data : item));
+      window.localStorage.removeItem('ortak_roman_draft:'+userId+':'+activeChapter.id);
+      await supabase.from('chapter_drafts').delete().eq('chapter_id',activeChapter.id).eq('user_id',userId);
       await loadChapterBlocks(activeChapter.id);
-      setEditorDirty(false);setDraftSaveState('idle');window.localStorage.removeItem('ortak_roman_draft:'+userId+':'+activeChapter.id);await supabase.from('chapter_drafts').delete().eq('chapter_id',activeChapter.id).eq('user_id',userId);
+      setEditorDirty(false);setDraftSaveState('idle');
       const { error: releaseError } = await supabase.rpc('release_chapter_writing_lock', { p_chapter_id: activeChapter.id });
       if (releaseError) setNotice('Bölüm kaydedildi ancak yazma kilidi bırakılamadı: ' + releaseError.message);
       else setNotice('Bölüm kaydedildi ve artık diğer yazarların okumasına açıldı.');
@@ -754,10 +776,10 @@ export default function App() {
 
   async function openChapter(chapter) {
     if (editorDirty && !window.confirm('Kaydedilmemiş değişikliklerin var. Bölüm değiştirmek istiyor musun?')) return;
-    setWritingLock(null); setLoadingChapterContent(true);
+    setWritingLock(null); setLoadingChapterContent(false);
     setEditorBlocks([]); setEditorContent('');
     setEditorTitle(chapter.title || ''); setEditorStatus(chapter.status || 'draft');
-    setActiveChapterId(chapter.id); setEditorDirty(false); setShowRevisions(false); setFocusMode(true);
+    setActiveChapterId(chapter.id); setEditorDirty(false); setShowRevisions(false); setFocusMode(false);
   }
 
   async function deleteChapter() {
@@ -806,6 +828,16 @@ export default function App() {
       await loadRevisions();
     }
     setBusy(false);
+  }
+
+  async function saveStoryTitle(event) {
+    event.preventDefault();
+    if (!activeStory || !isStoryOwner || !storyTitleDraft.trim()) return;
+    setStoryTitleBusy(true);
+    const { data, error } = await supabase.from('stories').update({ title: storyTitleDraft.trim(), updated_at: new Date().toISOString() }).eq('id', activeStory.id).select().single();
+    if (error) setNotice('Hikâye adı güncellenemedi: ' + error.message);
+    else { setStories(items => items.map(item => item.id === data.id ? data : item)); setNotice('Hikâye adı güncellendi.'); }
+    setStoryTitleBusy(false);
   }
 
   async function saveBookSettings(event) {

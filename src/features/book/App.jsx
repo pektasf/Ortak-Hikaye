@@ -7,6 +7,7 @@ import '../../styles/editorial-design.css';
 import '../../styles/reader-pagination.css';
 import { findReaderAuthorBlock, findReaderParagraphOffset, getReaderParagraphCredits } from './reader-attribution.js';
 import { normalizeWriterPaste } from './writer-input.js';
+import { readWriterCanvasBlocks, validateWriterBlockOwnership } from './writer-blocks.js';
 
 function renderHighlightedText(content, blockId, highlights) {
   const text = String(content || '');
@@ -67,30 +68,6 @@ function renderReaderParagraph(content, blocks, highlights, key) {
     </div>
   );
 }
-function readWriterCanvasBlocks(root, userId) {
-  if (!root) return [];
-  const nodes = Array.from(root.childNodes || []);
-  const blocks = [];
-  for (const node of nodes) {
-    const content = node.nodeType === 3
-      ? node.textContent
-      : (node.innerText || node.textContent || '');
-    const normalized = String(content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').trimEnd();
-    if (!normalized.trim()) continue;
-    const id = node.nodeType === 1 ? node.getAttribute('data-block-id') : null;
-    blocks.push({ id: id || null, content: normalized, author_id: userId });
-  }
-  if (!blocks.length) {
-    const fallback = String(root.innerText || root.textContent || '')
-      .replace(/\r/g, '').replace(/\u00a0/g, ' ').trim();
-    if (fallback) {
-      fallback.split(/\n\s*\n/).filter(Boolean)
-        .forEach(content => blocks.push({ id: null, content: content.trimEnd(), author_id: userId }));
-    }
-  }
-  return blocks;
-}
-
 function measureBookPages(value, element, authorBlocks = []) {
  const paragraphs=String(value||'').split(/\r?\n+/).map(x=>x.trim()).filter(Boolean);
  if(!paragraphs.length||!element||!element.clientWidth||!element.clientHeight)return [];
@@ -573,7 +550,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [activeChapterId, activeChapter?.updated_at, editorDirty, focusMode]);
 
-  useEffect(()=>{if(!activeChapter||!userId||!editorDirty)return;if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);setDraftSaveState('pending');draftSaveTimerRef.current=window.setTimeout(async()=>{const localKey='ortak_roman_draft:'+userId+':'+activeChapter.id;const canvas=document.querySelector('.writer-rich-canvas');const currentBlocks=canvas?readWriterCanvasBlocks(canvas,userId):editorBlocks;const blocks=currentBlocks.map(block=>({id:block.id||null,content:block.content,author_id:block.author_id||userId}));const updatedAt=new Date().toISOString();const draft={title:editorTitle,status:editorStatus,blocks,updated_at:updatedAt};try{window.localStorage.setItem(localKey,JSON.stringify(draft));}catch{setDraftSaveState('device-error');}const {error}=await supabase.from('chapter_drafts').upsert({chapter_id:activeChapter.id,user_id:userId,title:editorTitle.trim()||activeChapter.title,status:editorStatus,blocks,updated_at:updatedAt},{onConflict:'chapter_id,user_id'});setDraftSaveState(error?'device-only':'saved');if(error)setNotice('Taslak cihazda korundu; sunucuya eşitlenemedi: '+error.message);},1000);return()=>{if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);};},[activeChapter?.id,userId,editorDirty,editorTitle,editorStatus,editorBlocks,editorContent]);
+  useEffect(()=>{if(!activeChapter||!userId||!editorDirty)return;if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);setDraftSaveState('pending');draftSaveTimerRef.current=window.setTimeout(async()=>{const localKey='ortak_roman_draft:'+userId+':'+activeChapter.id;const canvas=document.querySelector('.writer-rich-canvas');const currentBlocks=canvas?readWriterCanvasBlocks(canvas,userId,editorBlocks):editorBlocks;const blocks=currentBlocks.map(block=>({id:block.id||null,content:block.content,author_id:block.author_id||userId}));const updatedAt=new Date().toISOString();const draft={title:editorTitle,status:editorStatus,blocks,updated_at:updatedAt};try{window.localStorage.setItem(localKey,JSON.stringify(draft));}catch{setDraftSaveState('device-error');}const {error}=await supabase.from('chapter_drafts').upsert({chapter_id:activeChapter.id,user_id:userId,title:editorTitle.trim()||activeChapter.title,status:editorStatus,blocks,updated_at:updatedAt},{onConflict:'chapter_id,user_id'});setDraftSaveState(error?'device-only':'saved');if(error)setNotice('Taslak cihazda korundu; sunucuya eşitlenemedi: '+error.message);},1000);return()=>{if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);};},[activeChapter?.id,userId,editorDirty,editorTitle,editorStatus,editorBlocks,editorContent]);
 
   useEffect(() => {
     try {
@@ -892,13 +869,21 @@ export default function App() {
   async function saveChapter(event) {
     event.preventDefault();
     if (!activeChapter || !editorTitle.trim()) return;
+    if (!writingLock?.acquired) { setNotice('Kaydetmek için yazma oturumunun etkin olması gerekiyor.'); return; }
     if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);
     setBusy(true);
     const richCanvas = document.querySelector('.writer-rich-canvas');
     let blocksToSave = editorBlocks.map(block => ({ id: block.id || null, content: block.content }));
     if (richCanvas) {
+      const canvasBlocks = readWriterCanvasBlocks(richCanvas, userId, editorBlocks);
+      const ownership = validateWriterBlockOwnership(canvasBlocks, editorBlocks, userId);
+      if (!ownership.valid) {
+        setNotice(ownership.message);
+        setBusy(false);
+        return;
+      }
       const usedIds = new Set();
-      blocksToSave = readWriterCanvasBlocks(richCanvas, userId).map(block => {
+      blocksToSave = canvasBlocks.map(block => {
         const id = block.id && !usedIds.has(block.id) ? block.id : null;
         if (id) usedIds.add(id);
         return { id, content: block.content };
@@ -1320,7 +1305,7 @@ export default function App() {
                         aria-multiline="true"
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
                         style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'Literata', 'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
-                        onInput={e=>{const nodes=readWriterCanvasBlocks(e.currentTarget,userId);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
+                        onInput={e=>{const nodes=readWriterCanvasBlocks(e.currentTarget,userId,editorBlocks);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
                          onPaste={e=>{e.preventDefault();const plainText=normalizeWriterPaste(e.clipboardData?.getData('text/plain')||'');if(plainText)document.execCommand('insertText',false,plainText);}}
                         onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();e.currentTarget.closest('form')?.requestSubmit();}}}
                         onMouseUp={captureSentenceSelection}

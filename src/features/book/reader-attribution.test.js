@@ -44,3 +44,42 @@ test('normalizes clipboard line endings and non-breaking spaces without losing p
 test('keeps Turkish characters and punctuation unchanged', () => {
   assert.equal(normalizeWriterPaste('İçimdeki öykü: “Şimdi başlıyor.”'), 'İçimdeki öykü: “Şimdi başlıyor.”');
 });
+
+
+import { readWriterCanvasBlocks, validateWriterBlockOwnership } from './writer-blocks.js';
+
+test('canvas reader preserves the original author metadata of existing blocks', () => {
+  const paragraph = { nodeType: 1, getAttribute: name => name === 'data-block-id' ? 'block-a' : null, innerText: 'Düzenlenen paragraf.' };
+  const root = { childNodes: [paragraph] };
+  const existing = [{ id: 'block-a', content: 'Eski metin.', author_id: 'writer-a', updated_by: 'writer-b', author_name: 'Eda' }];
+  assert.deepEqual(readWriterCanvasBlocks(root, 'writer-b', existing), [{
+    id: 'block-a', content: 'Düzenlenen paragraf.', author_id: 'writer-a', updated_by: 'writer-b', author_name: 'Eda'
+  }]);
+});
+
+test('new canvas paragraphs are attributed to the current writer', () => {
+  const paragraph = { nodeType: 1, getAttribute: () => null, innerText: 'Yeni paragraf.' };
+  assert.deepEqual(readWriterCanvasBlocks({ childNodes: [paragraph] }, 'writer-b'), [{
+    id: null, content: 'Yeni paragraf.', author_id: 'writer-b', updated_by: 'writer-b'
+  }]);
+});
+
+test('protected paragraphs cannot be removed, changed, or reordered during save', () => {
+  const original = [
+    { id: 'protected-a', content: 'Eda paragrafı.', author_id: 'writer-a' },
+    { id: 'mine', content: 'Benim paragrafım.', author_id: 'writer-b' },
+    { id: 'protected-c', content: 'Mahmut paragrafı.', author_id: 'writer-c' }
+  ];
+  assert.equal(validateWriterBlockOwnership([original[1], original[2]], original, 'writer-b').valid, false);
+  assert.equal(validateWriterBlockOwnership([{ ...original[0], content: 'Değiştirildi.' }, original[1], original[2]], original, 'writer-b').valid, false);
+  assert.equal(validateWriterBlockOwnership([original[2], original[1], original[0]], original, 'writer-b').valid, false);
+});
+
+test('writers can edit their own paragraphs while protected paragraphs remain intact', () => {
+  const original = [
+    { id: 'protected-a', content: 'Eda paragrafı.', author_id: 'writer-a' },
+    { id: 'mine', content: 'Eski metin.', author_id: 'writer-b' }
+  ];
+  const candidate = [original[0], { ...original[1], content: 'Yeni metin.' }];
+  assert.deepEqual(validateWriterBlockOwnership(candidate, original, 'writer-b'), { valid: true, message: '' });
+});

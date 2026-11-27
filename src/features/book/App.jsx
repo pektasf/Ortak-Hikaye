@@ -53,20 +53,88 @@ function normalizeAttributionText(value) {
 }
 
 function buildRevisionAttribution(revisions, targetContent, names) {
-  let previous = ''; let authors = []; let lastEditor = null;
+  const tokenize = value => normalizeAttributionText(value).match(/\\s+|[^\\s]+/g) || [];
+  let previousTokens = [];
+  let tokenAuthors = [];
+  let lastEditor = null;
   const ordered = [...(revisions || [])].sort((a,b) => new Date(a.created_at)-new Date(b.created_at));
+
   for (const revision of ordered) {
-    const next = normalizeAttributionText(revision.content); if (!next) continue;
+    const nextTokens = tokenize(revision.content);
+    if (!nextTokens.length) continue;
     const editor = revision.editor_id || lastEditor;
-    if (!previous) { previous = next; authors = Array(next.length).fill(editor); lastEditor = editor; continue; }
-    let prefix=0; while(prefix<previous.length && prefix<next.length && previous[prefix]===next[prefix]) prefix++;
-    let suffix=0; while(suffix<previous.length-prefix && suffix<next.length-prefix && previous[previous.length-1-suffix]===next[next.length-1-suffix]) suffix++;
-    authors=[...authors.slice(0,prefix),...Array(Math.max(0,next.length-prefix-suffix)).fill(editor),...(suffix?authors.slice(previous.length-suffix):[])];
-    previous=next; lastEditor=editor;
+    if (!previousTokens.length) {
+      previousTokens = nextTokens;
+      tokenAuthors = nextTokens.map(() => editor);
+      lastEditor = editor;
+      continue;
+    }
+
+    // LCS token diff preserves unchanged words even when a writer inserts text
+    // in the middle of an existing paragraph. Only genuinely new/replaced
+    // tokens are attributed to the editor of this revision.
+    const rows = previousTokens.length + 1;
+    const cols = nextTokens.length + 1;
+    const dp = Array.from({ length: rows }, () => new Uint16Array(cols));
+    for (let i = previousTokens.length - 1; i >= 0; i--) {
+      for (let j = nextTokens.length - 1; j >= 0; j--) {
+        dp[i][j] = previousTokens[i] === nextTokens[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const nextAuthors = [];
+    let i = 0, j = 0;
+    while (j < nextTokens.length) {
+      if (i < previousTokens.length && previousTokens[i] === nextTokens[j]) {
+        nextAuthors.push(tokenAuthors[i]);
+        i++; j++;
+      } else if (i < previousTokens.length && dp[i + 1][j] >= dp[i][j + 1]) {
+        i++;
+      } else {
+        nextAuthors.push(editor);
+        j++;
+      }
+    }
+    previousTokens = nextTokens;
+    tokenAuthors = nextAuthors;
+    lastEditor = editor;
   }
-  const target=normalizeAttributionText(targetContent);
-  if(target && target!==previous){let prefix=0;while(prefix<previous.length&&prefix<target.length&&previous[prefix]===target[prefix])prefix++;let suffix=0;while(suffix<previous.length-prefix&&suffix<target.length-prefix&&previous[previous.length-1-suffix]===target[target.length-1-suffix])suffix++;authors=[...authors.slice(0,prefix),...Array(Math.max(0,target.length-prefix-suffix)).fill(lastEditor),...(suffix?authors.slice(previous.length-suffix):[])];}
-  return {text:target,authors,names:names||{}};
+
+  const targetTokens = tokenize(targetContent);
+  if (targetTokens.join('') !== previousTokens.join('')) {
+    // The displayed saved chapter differs from the latest revision snapshot.
+    // Do not guess who wrote the unmatched text.
+    const rows = previousTokens.length + 1;
+    const cols = targetTokens.length + 1;
+    const dp = Array.from({ length: rows }, () => new Uint16Array(cols));
+    for (let i = previousTokens.length - 1; i >= 0; i--) {
+      for (let j = targetTokens.length - 1; j >= 0; j--) {
+        dp[i][j] = previousTokens[i] === targetTokens[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const nextAuthors = [];
+    let i = 0, j = 0;
+    while (j < targetTokens.length) {
+      if (i < previousTokens.length && previousTokens[i] === targetTokens[j]) {
+        nextAuthors.push(tokenAuthors[i]); i++; j++;
+      } else if (i < previousTokens.length && dp[i + 1][j] >= dp[i][j + 1]) {
+        i++;
+      } else {
+        nextAuthors.push(null); j++;
+      }
+    }
+    tokenAuthors = nextAuthors;
+  }
+
+  const text = targetTokens.join('');
+  const authors = [];
+  targetTokens.forEach((token, index) => {
+    for (let i = 0; i < token.length; i++) authors.push(tokenAuthors[index] || null);
+  });
+  return { text, authors, names: names || {} };
 }
 
 function renderAttributedReaderText(content, attribution, highlights) {

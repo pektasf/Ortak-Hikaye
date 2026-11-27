@@ -402,6 +402,9 @@ export default function App() {
     });
   }, [book?.id, book?.title, book?.subtitle, book?.note, book?.target_words, book?.extension_words, settingsDirty]);
 
+  useEffect(()=>{if(readerPageRestoreRef.current===null||!readerPages.length)return;setReaderPageIndex(Math.min(readerPageRestoreRef.current,readerMaxPageIndex));readerPageRestoreRef.current=null;},[readerPages.length,readerMaxPageIndex]);
+  useEffect(()=>{if(view!=='reader'||effectiveReaderLayout!=='scroll'||!readerScrollRestore)return;const sheet=document.querySelector('.reader-scroll-sheet');if(sheet){sheet.scrollTop=readerScrollRestore;setReaderScrollRestore(0);}},[view,effectiveReaderLayout,readerChapter?.id,readerScrollRestore]);
+
   if (!supabase) return <SetupScreen />;
 
   async function signIn(event) {

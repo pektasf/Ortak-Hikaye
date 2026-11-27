@@ -34,3 +34,15 @@ test('uses the exact source offset when a page fragment is unchanged', () => {
   const source = 'Başlangıç. Devam eden cümle.';
   assert.equal(findReaderParagraphOffset('Devam eden cümle.', source), source.indexOf('Devam'));
 });
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { normalizeWriterPaste } from './writer-input.js';
+
+test('normalizes clipboard line endings and non-breaking spaces without losing paragraphs', () => {
+  assert.equal(normalizeWriterPaste('Birinci satır\r\n\r\nİkinci\u00a0paragraf'), 'Birinci satır\n\nİkinci paragraf');
+});
+
+test('keeps Turkish characters and punctuation unchanged', () => {
+  assert.equal(normalizeWriterPaste('İçimdeki öykü: “Şimdi başlıyor.”'), 'İçimdeki öykü: “Şimdi başlıyor.”');
+});

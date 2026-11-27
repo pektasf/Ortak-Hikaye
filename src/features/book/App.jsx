@@ -116,6 +116,8 @@ export default function App() {
   const [publicProfileId, setPublicProfileId] = useState(null);
   const [readingIndex, setReadingIndex] = useState(0);
   const [writingLock, setWritingLock] = useState(null);
+  const [activeWritingLocks, setActiveWritingLocks] = useState({});
+  const [loadingChapterContent, setLoadingChapterContent] = useState(false);
   const [lockNotice, setLockNotice] = useState('');
   const [view, setView] = useState('home');
   const [writingFont, setWritingFont] = useState('serif');
@@ -145,7 +147,7 @@ export default function App() {
   const activeChapter = chapters.find(item => item.id === activeChapterId) || null;
   const isStoryOwner = Boolean(activeStory && activeStory.owner_id === userId);
   // Saved chapters are readable by story members before publication; publication is a separate status.
-  const readerChapters = chapters.filter(item => String(item.content || '').trim().length > 0);
+  const readerChapters = chapters.filter(item => String(item.content || '').trim().length > 0 && !activeWritingLocks[item.id]);
   const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
   const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
   const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;
@@ -343,6 +345,45 @@ export default function App() {
     refreshChapters(activeStoryId);
   }, [activeStoryId, authorized]);
 
+  useEffect(() => {
+    if (!authorized || !activeStoryId) { setActiveWritingLocks({}); return; }
+    let alive = true;
+    const refreshPresence = async () => {
+      const ids = chapters.map(item => item.id);
+      if (!ids.length) { if (alive) setActiveWritingLocks({}); return; }
+      const { data, error } = await supabase.from('chapter_writing_locks').select('chapter_id,user_id,expires_at').in('chapter_id', ids).gt('expires_at', new Date().toISOString());
+      if (error) { if (alive) setNotice('Yazma durumu alınamadı: ' + error.message); return; }
+      const rows = data || [];
+      const userIds = [...new Set(rows.map(item => item.user_id).filter(Boolean))];
+      const profilesResult = userIds.length ? await supabase.from('profiles').select('id,display_name').in('id', userIds) : {data:[]};
+      const names = Object.fromEntries((profilesResult.data || []).map(item => [item.id, item.display_name || 'Bir yazar']));
+      const next = Object.fromEntries(rows.map(item => [item.chapter_id, {user_id:item.user_id,display_name:names[item.user_id] || 'Bir yazar',expires_at:item.expires_at}]));
+      if (alive) setActiveWritingLocks(next);
+    };
+    refreshPresence();
+    const channel = supabase.channel('story-writing-presence-' + activeStoryId).on('postgres_changes', {event:'*',schema:'public',table:'chapter_writing_locks'}, refreshPresence).subscribe();
+    const timer = window.setInterval(refreshPresence, 15000);
+    return () => { alive=false; window.clearInterval(timer); supabase.removeChannel(channel); };
+  }, [authorized, activeStoryId, chapters.map(item => item.id).join('|')]);
+
+  useEffect(() => {
+    if (!authorized || !focusMode || !writingLock?.acquired || !loadingChapterContent || !activeChapterId) return;
+    let alive = true;
+    (async () => {
+      const chapter = chapters.find(item => item.id === activeChapterId);
+      if (!chapter) { setLoadingChapterContent(false); return; }
+      setEditorTitle(chapter.title || ''); setEditorStatus(chapter.status || 'draft');
+      const loaded = await loadChapterBlocks(chapter.id);
+      if (!alive) return;
+      if (!loaded.length && chapter.content) {
+        const legacyBlocks = chapter.content.split(/\n\s*\n/).filter(Boolean).map(content => ({id:null,content,author_id:null,updated_by:null}));
+        setEditorBlocks(legacyBlocks); setEditorContent(chapter.content);
+      }
+      setEditorDirty(false); setLoadingChapterContent(false);
+    })();
+    return () => { alive=false; };
+  }, [authorized, focusMode, writingLock?.acquired, loadingChapterContent, activeChapterId]);
+
   useEffect(()=>{if(!authorized||!userId||!activeStoryId||!readerChapter||view!=='reader')return;if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(async()=>{const sheet=document.querySelector('.reader-scroll-sheet');const scrollPosition=effectiveReaderLayout==='scroll'?Math.max(0,Math.round(sheet?.scrollTop||0)):0;const {error}=await supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:readerPageIndex,reader_layout:readerLayout,scroll_position:scrollPosition},{onConflict:'user_id,story_id'});if(error)setNotice('Okuma konumu kaydedilemedi: '+error.message);},350);return()=>{if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);};},[readerPageIndex,readerLayout,readingIndex,readerChapter?.id,activeStoryId,authorized,userId,view,effectiveReaderLayout]);
 
   useEffect(() => {
@@ -353,9 +394,10 @@ export default function App() {
     const acquire = async () => {
       const { data, error } = await supabase.rpc('acquire_chapter_writing_lock', { p_chapter_id: activeChapterId });
       if (!alive) return;
-      if (error) { setWritingLock({ acquired:false, display_name:'Başka bir yazar', error:error.message }); return; }
+      if (error) { setLoadingChapterContent(false); setWritingLock({ acquired:false, display_name:'Başka bir yazar', error:error.message }); return; }
       ownsLock = Boolean(data?.acquired && data.user_id === userId);
       setWritingLock(data);
+      if (!data?.acquired) setLoadingChapterContent(false);
       setLockNotice(data?.acquired ? '' : (data?.display_name || 'Bir yazar') + ' şu anda bu bölümü yazıyor.');
     };
     acquire();
@@ -706,19 +748,10 @@ export default function App() {
 
   async function openChapter(chapter) {
     if (editorDirty && !window.confirm('Kaydedilmemiş değişikliklerin var. Bölüm değiştirmek istiyor musun?')) return;
-    setActiveChapterId(chapter.id);
-    setEditorTitle(chapter.title);
-    const loaded = await loadChapterBlocks(chapter.id);
-    if (!loaded.length && chapter.content) {
-      const legacyBlocks = chapter.content.split(/\n\s*\n/).filter(Boolean).map(content => ({id:null,content,author_id:null,updated_by:null}));
-      setEditorBlocks(legacyBlocks);
-      setEditorContent(chapter.content);
-    }
-    setEditorStatus(chapter.status || 'draft');
-    setEditorDirty(false);
-    setShowRevisions(false);
-    setFocusMode(true);
-
+    setWritingLock(null); setLoadingChapterContent(true);
+    setEditorBlocks([]); setEditorContent('');
+    setEditorTitle(chapter.title || ''); setEditorStatus(chapter.status || 'draft');
+    setActiveChapterId(chapter.id); setEditorDirty(false); setShowRevisions(false); setFocusMode(true);
   }
 
   async function deleteChapter() {
@@ -982,9 +1015,9 @@ export default function App() {
               <div className="chapter-layout">
                 <aside className="chapter-sidebar">
                   <div className="chapter-sidebar-title"><h3>Bölümler</h3><span>{chapters.length}</span></div>
-                  {chapters.map((chapter,index) => <button key={chapter.id} className={'chapter-nav-item' + (chapter.id === activeChapterId ? ' active' : '')} onClick={() => openChapter(chapter)}>
-                    <small>{String(index+1).padStart(2,'0')}</small><span><strong>{chapter.title}</strong><em>{chapter.status === 'published' ? 'Yayında' : 'Taslak'}</em></span>
-                  </button>)}
+                  {chapters.map((chapter,index) => { const presence = activeWritingLocks[chapter.id]; const isOtherWriter = presence && presence.user_id !== userId; return <button key={chapter.id} className={'chapter-nav-item' + (chapter.id === activeChapterId ? ' active' : '') + (presence ? ' is-being-written' : '')} onClick={() => openChapter(chapter)}>
+                    <small>{String(index+1).padStart(2,'0')}</small><span><strong>{chapter.title}</strong><em>{presence ? (presence.user_id === userId ? '✎ Şu an sen yazıyorsun' : '✎ Şu an yazıyor: ' + presence.display_name) : (chapter.status === 'published' ? 'Yayında' : 'Taslak')}</em></span>{isOtherWriter && <i className="chapter-live-dot" aria-label="Yazılıyor"/>}
+                  </button>; })}
                   {!chapters.length && <p className="empty-small">Bu hikâyede henüz bölüm yok.</p>}
                   <form className="new-chapter-form" onSubmit={createChapter}>
                     <input required maxLength={120} value={newChapterTitle} onChange={e => setNewChapterTitle(e.target.value)} placeholder="Yeni bölüm başlığı" aria-label="Yeni bölüm başlığı"/>
@@ -1020,7 +1053,13 @@ export default function App() {
                     {chapterOverLimit && <div className="word-limit-warning">Bölüm kelime sınırını aştın. Kaydedebilmek için {Math.max(0,words(editorContent)-chapterWordLimit)} kelime azalt veya bölüm hedefini yükselt.</div>}
                     {writingLock && <div className={'writing-presence ' + (writingLock.acquired ? 'is-self' : 'is-other')}><span className="writing-pencil">✎</span>{writingLock.acquired ? 'Şu anda bu bölümü sen yazıyorsun. Sıra sende.' : (writingLock.display_name || 'Bir yazar') + ' şu anda yazıyor · Bu bölüm geçici olarak kilitli.'}</div>}
                     <div className={'chapter-blocks-editor' + (focusMode ? ' document-page-canvas' : '')} aria-label="Paragraf yazma alanı">
-                      {focusMode ? <div
+                      {!writingLock?.acquired ? <div className="private-writing-screen" role="status" aria-live="polite">
+                         <div className="private-writing-animation"><span className="private-writing-pencil">✎</span><span className="private-writing-line line-one"/><span className="private-writing-line line-two"/><span className="private-writing-line line-three"/></div>
+                         <span className="eyebrow">ÖZEL YAZIM ALANI</span>
+                         <h3>{loadingChapterContent ? 'Yazma alanı hazırlanıyor…' : (writingLock?.display_name || activeWritingLocks[activeChapterId]?.display_name || 'Bir yazar') + ' şu anda yazıyor.'}</h3>
+                         <p>Bu bölümün metni yazım tamamlanıp kaydedilene kadar diğer yazarlara gösterilmez.</p>
+                         <span className="private-writing-lock">▣ Bölüm geçici olarak kilitli</span>
+                       </div> : focusMode ? <div
                         className="writer-rich-canvas"
                         contentEditable={Boolean(writingLock?.acquired)}
                         suppressContentEditableWarning

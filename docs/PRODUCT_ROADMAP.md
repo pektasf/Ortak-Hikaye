@@ -83,3 +83,13 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 3. İkinci test hesabını hikâye davetiyle dahil et.
 4. İkinci hesabın yalnızca davet edildiği hikâyeyi gördüğünü; bölüm yazıp kaydedebildiğini; davet oluşturabildiğini doğrula.
 5. Sonra okuma ekranı ve kitap içindekiler deneyimini geliştir.
+
+
+## Yeni ürün geliştirmeleri
+- [x] Hikâye sahibine hikâyeyi ve bağlı kayıtları güvenli biçimde silme
+- [x] Defter veya geniş Word benzeri alan seçilebilen odaklı yazma ekranı
+- [x] Yazar profili, düzenlenebilir görünen ad ve biyografi
+- [x] Hikâye, katılım, bölüm, davet ve bölüm düzenleme istatistikleri
+- [ ] Gerçek paragraf/metin bloğu bazlı yazarlık ve kelime katkısı
+- [ ] Cümle vurguları ve yazarın cümlelerinin kaç kez vurgulandığı
+- [ ] Profil görseli yükleme ve diğer yazarların profil sayfalarına geçiş

@@ -18,6 +18,9 @@ export default function App() {
   const [authorized, setAuthorized] = useState(false);
   const [role, setRole] = useState('writer');
   const [inviteLink, setInviteLink] = useState('');
+  const [settings, setSettings] = useState({ title: '', subtitle: '', note: '', target_words: 1000, extension_words: 1000 });
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -74,6 +77,11 @@ export default function App() {
     if (b.data) setBook(b.data);
     if (l.data) setLock(l.data);
   }
+
+  useEffect(() => {
+    if (!book || settingsDirty) return;
+    setSettings({ title: book.title || '', subtitle: book.subtitle || '', note: book.note || '', target_words: book.target_words || 1000, extension_words: book.extension_words || 1000 });
+  }, [book?.id, book?.title, book?.subtitle, book?.note, book?.target_words, book?.extension_words, settingsDirty]);
 
   useEffect(() => {
     if (!supabase || !session || !authorized) return;
@@ -165,6 +173,34 @@ export default function App() {
     setBusy(false);
   }
 
+  async function saveBookSettings(event) {
+    event.preventDefault();
+    if (role !== 'owner' || !book?.id) return;
+    const targetWords = Number(settings.target_words);
+    const extensionWords = Number(settings.extension_words);
+    if (!Number.isInteger(targetWords) || targetWords < 100 || !Number.isInteger(extensionWords) || extensionWords < 100) {
+      setNotice('Kelime hedefleri en az 100 ve tam sayı olmalı.');
+      return;
+    }
+    setSettingsBusy(true);
+    const { data, error } = await supabase.from('books').update({
+      title: settings.title.trim() || 'Ortak Roman',
+      subtitle: settings.subtitle.trim(),
+      note: settings.note.trim(),
+      target_words: targetWords,
+      extension_words: extensionWords,
+      updated_at: new Date().toISOString()
+    }).eq('id', book.id).select().single();
+    if (error) setNotice('Kitap ayarları kaydedilemedi: ' + error.message);
+    else {
+      setBook(data);
+      setSettings({ title: data.title, subtitle: data.subtitle, note: data.note, target_words: data.target_words, extension_words: data.extension_words });
+      setSettingsDirty(false);
+      setNotice('Kitap ayarları kaydedildi.');
+    }
+    setSettingsBusy(false);
+  }
+
   if (session && !authorized) {
     return <div className="setup"><div className="setup-card">
       <small>ORTAK ROMAN · DAVET KONTROLÜ</small>
@@ -182,7 +218,7 @@ export default function App() {
     <main className="content">
       <section className="hero">
         <div><span className="eyebrow">BİRLİKTE YAZILAN BİR HİKÂYE</span>
-          <h1>{book?.title || 'Ortak Roman'}</h1><p>{book?.subtitle || 'Bir hikâye, birçok ses'}</p></div>
+          <h1>{book?.title || 'Ortak Roman'}</h1><p>{book?.subtitle || 'Bir hikâye, birçok ses'}</p>{book?.note && <p className="book-note">{book.note}</p>}</div>
         <div className="word-count"><strong>{total.toLocaleString('tr-TR')}</strong><span> / {target.toLocaleString('tr-TR')} kelime</span></div>
       </section>
       <div className="progress"><i style={{ width: Math.min(100, total / target * 100) + '%' }} /></div>
@@ -196,6 +232,21 @@ export default function App() {
           <p>Bağlantı 7 gün geçerlidir ve süresi dolana kadar sınırsız sayıda yeni hesap tarafından kullanılabilir.</p>
           <button className="button" disabled={busy} onClick={makeInvite}>Davet bağlantısı oluştur</button>
           {inviteLink && <div className="invite-link"><input readOnly value={inviteLink} onFocus={e => e.target.select()} /><button className="button light" onClick={() => navigator.clipboard.writeText(inviteLink)}>Kopyala</button></div>}
+        </section>}
+        {role === 'owner' && <section className="panel settings-panel">
+          <span className="eyebrow">YÖNETİCİ · KİTAP AYARLARI</span>
+          <h2>Romanı yapılandır</h2>
+          <p>Kitabın başlığını, konusunu ve kelime hedeflerini buradan yönetebilirsin.</p>
+          <form onSubmit={saveBookSettings}>
+            <label>Kitap başlığı<input required maxLength={100} value={settings.title} onChange={e => { setSettings(v => ({ ...v, title: e.target.value })); setSettingsDirty(true); }} /></label>
+            <label>Alt başlık<input maxLength={160} value={settings.subtitle} onChange={e => { setSettings(v => ({ ...v, subtitle: e.target.value })); setSettingsDirty(true); }} /></label>
+            <label>Romanın konusu / açıklaması<textarea className="settings-note" rows={4} maxLength={1200} value={settings.note} onChange={e => { setSettings(v => ({ ...v, note: e.target.value })); setSettingsDirty(true); }} placeholder="Hikâyenin dünyasını, temasını veya yazarlar için başlangıç notunu yaz..." /></label>
+            <div className="settings-numbers">
+              <label>Toplam kelime hedefi<input type="number" min="100" step="100" value={settings.target_words} onChange={e => { setSettings(v => ({ ...v, target_words: e.target.value })); setSettingsDirty(true); }} /></label>
+              <label>Uzatma miktarı<input type="number" min="100" step="100" value={settings.extension_words} onChange={e => { setSettings(v => ({ ...v, extension_words: e.target.value })); setSettingsDirty(true); }} /></label>
+            </div>
+            <div className="settings-actions"><span>Değişiklikler tüm yazarlara yansır.</span><button className="button" disabled={settingsBusy || !settingsDirty}>{settingsBusy ? 'Kaydediliyor…' : 'Ayarları kaydet'}</button></div>
+          </form>
         </section>}
         <section className="panel">
           <span className="eyebrow">YAZMA SIRASI</span>

@@ -1171,3 +1171,23 @@ textarea{overflow-wrap:anywhere}
   .home-library-empty .button{width:100%}
   .home-library-count{font-size:10px}
 }
+
+
+/* Book table of contents — quiet, readable navigation inside the book. */
+.reader-toc{width:min(100%,760px);margin:34px auto;padding:clamp(24px,5vw,52px);border:1px solid #e4d8c8;border-radius:var(--radius-md);background:#fffdf8;box-shadow:var(--shadow-card);color:#49372a}
+.reader-toc>.eyebrow{display:block;color:#a28a70;font-size:9px;letter-spacing:.18em}
+.reader-toc h2{margin:8px 0 24px;color:#49372a;font:500 clamp(27px,4vw,36px)/1.15 var(--font-display)}
+.reader-toc ol{list-style:none;margin:0;padding:0;counter-reset:reader-toc}
+.reader-toc li+li{border-top:1px solid #eee6dc}
+.reader-toc li button{display:grid;width:100%;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:12px;padding:14px 8px;border:0;border-radius:7px;background:transparent;text-align:left;cursor:pointer;transition:background .16s ease}
+.reader-toc li button:hover{background:#f7f1e8}
+.reader-toc li button.active{background:#f2e9dd}
+.reader-toc-number{color:#a58b70;font:italic 16px var(--font-display)}
+.reader-toc-title{min-width:0;color:#594535;font:500 17px/1.35 var(--font-display);overflow-wrap:anywhere}
+.reader-toc-status{color:#a18d79;font:500 9px/1.4 var(--font-ui);letter-spacing:.04em;white-space:nowrap}
+.reader-toc li button:focus-visible{outline:2px solid #b38a64;outline-offset:2px}
+@media(max-width:560px){
+  .reader-toc{margin:22px auto;padding:24px 18px}
+  .reader-toc li button{grid-template-columns:28px minmax(0,1fr);gap:9px;padding:12px 5px}
+  .reader-toc-status{grid-column:2}
+}

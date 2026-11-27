@@ -24,6 +24,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Validate Supabase build secrets
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL repository secret" && exit 1)
+          test -n "$VITE_SUPABASE_ANON_KEY" || (echo "Missing VITE_SUPABASE_ANON_KEY repository secret" && exit 1)
+          case "$VITE_SUPABASE_URL" in https://*.supabase.co) ;; *) echo "VITE_SUPABASE_URL format is invalid"; exit 1 ;; esac
+          echo "Supabase build configuration is present."
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Build production site
@@ -31,6 +40,24 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
+      - name: Verify Supabase configuration was embedded
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, readdirSync } from 'node:fs';
+          import { join } from 'node:path';
+          const files = readdirSync('dist/assets').filter((name) => name.endsWith('.js'));
+          const bundle = files.map((name) => readFileSync(join('dist/assets', name), 'utf8')).join('\n');
+          if (!process.env.VITE_SUPABASE_URL || !bundle.includes(process.env.VITE_SUPABASE_URL)) {
+            throw new Error('Supabase URL was not embedded in the production bundle.');
+          }
+          if (!process.env.VITE_SUPABASE_ANON_KEY || !bundle.includes(process.env.VITE_SUPABASE_ANON_KEY)) {
+            throw new Error('Supabase publishable key was not embedded in the production bundle.');
+          }
+          console.log('Verified: Supabase URL and publishable key are embedded (values hidden).');
+          NODE
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

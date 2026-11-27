@@ -1,43 +1,31 @@
 # Ortak Roman
 
-Çok yazarlı, davetli katılıma dayalı ortak roman uygulaması.
+Davet bağlantısıyla katılım sağlayan yazarların ortak bir hikâye oluşturduğu web uygulaması.
+
+## Canlı yayın
+- Site: https://pektasf.github.io/Ortak-Hikaye/
+- Dağıtım: GitHub Actions → GitHub Pages
+- Backend: Supabase (Auth, PostgreSQL, RLS, Realtime)
 
 ## Ürün kararları
 - İlk kelime hedefi: **1.000**
-- Katılım: **Davetli (invite-only)**
-- Barındırma: **Ücretsiz katman**
-- Tasarım: **Hybrid** — klasik kitap okuma deneyimi + sade modern yönetim arayüzü
+- Katılım: **Davet bağlantısı ile**
+- Hosting: **Ücretsiz katman**
+- Tasarım: **Hybrid** — klasik kitap okuma estetiği + modern yönetim arayüzü
 
-## Mimari
-- React + Vite: web istemcisi
-- Supabase Auth: davetli kullanıcı oturumları
-- Supabase Postgres + RLS + RPC: kitap, katkı, oy ve sunucu taraflı yazma kilidi
-- Supabase Realtime: eşzamanlı güncellemeler
-- GitHub: kaynak kodu ve sürüm geçmişi
-- Vercel / Netlify: ücretsiz statik frontend yayını
+## Hızlı kurulum
+Yayın, Supabase ve GitHub Actions yapılandırmasına ihtiyaç duyar. Adım adım yönerge: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-## Dizinler
-- `src/features/book`: kitap deneyimi
-- `src/components`: paylaşılan bileşenler
-- `src/lib`: Supabase ve yardımcılar
-- `src/styles`: tasarım sistemi
-- `supabase`: veritabanı şeması ve güvenlik politikaları
-- `docs/legacy`: ilk Claude Artifact kaynağının korunmuş kopyası
+1. Supabase Free projesi oluşturun ve `supabase/schema.sql` dosyasını SQL Editor'de çalıştırın.
+2. Email OTP sağlayıcısını açın; Supabase Site URL ve Redirect URL'lerini Pages adresine ayarlayın.
+3. GitHub Actions repository secrets olarak `VITE_SUPABASE_URL` ve `VITE_SUPABASE_ANON_KEY` ekleyin.
+4. Repository Settings → Pages → Source: **GitHub Actions**.
+5. `main` dalına yapılan her push otomatik derlenir ve yayınlanır.
 
-## Yerel geliştirme
-1. Node.js 20+ kur.
-2. `npm install`
-3. `.env.example` dosyasını `.env` olarak kopyala.
-4. Supabase URL ve anon key değerlerini gir.
-5. `supabase/schema.sql` dosyasını Supabase SQL Editor'de çalıştır.
-6. `npm run dev`
+**Güvenlik:** Supabase `service_role` anahtarını hiçbir zaman frontend'e veya GitHub Actions secrets üzerinden Vite build'ine vermeyin. Yalnızca anon/public key kullanılır. Davet token'ları veritabanında SHA-256 özeti olarak saklanır ve RLS içerikleri yetkisiz hesaplardan gizler.
 
-Supabase bağlantısı yapılandırılmadan uygulama kurulum ekranını gösterir. Canlı çok kullanıcılı kullanım; Supabase kurulumu, davet ayarları ve iki hesapla güvenlik/eşzamanlılık testleri tamamlanınca açılmalıdır.
+## Geliştirme
+Node.js 22+, `npm install`, `.env.example` dosyasını `.env` olarak kopyalama ve `npm run dev`.
 
-## Güvenlik
-- `service_role` anahtarını asla frontend'e ekleme.
-- Public signup kapalı tutulmalı; kullanıcılar yönetici davetiyle katılmalı.
-- Tarayıcıdaki rol/görünürlük kontrolleri güvenlik sınırı değildir; yetkiler RLS ve RPC ile doğrulanır.
-
-## Kaynak kodun korunması
-İlk HTML/Claude Artifact dosyası mevcut çalışma alanında ayrı bir kaynak olarak korunuyor. Bu ilk GitHub aktarımında legacy HTML henüz depoya eklenmedi; sonraki aktarımda `docs/legacy/` altına eklenecek.
+## Durum
+GitHub Actions dağıtım workflow'u ve davet doğrulama altyapısı depoda. İlk canlı kullanım için Supabase projesi, iki GitHub Actions secret'ı ve ilk sahip hesabı bootstrap adımı gerekir.

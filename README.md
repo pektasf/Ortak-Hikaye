@@ -37,3 +37,8 @@ GitHub Actions dağıtım workflow'u ve davet doğrulama altyapısı depoda. İl
 ## Güncel içerik mimarisi
 
 Uygulamanın ana yazım akışı artık hikâye ve bölüm bazındadır. Her hikâyenin kendi üyeleri, davetleri ve bölümleri bulunur. Bölüm değişikliklerinin önceki sürümleri saklanır; okuma ilerlemesi kullanıcı/hikâye bazında kaydedilir. Eski kitap-geneli yazım tabloları veri kaybını önlemek için korunur ancak istemci erişimine kapatılmıştır. Teknik ayrıntılar: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+
+## Veritabanı tablo sözlüğü
+
+Supabase Table Editor'de tabloların ne işe yaradığını açıklayan veritabanı yorumları eklendi. Tablo adları ve kullanım amaçları için [veritabanı tablo sözlüğüne](docs/DATABASE_TABLE_DICTIONARY.md) bakın.

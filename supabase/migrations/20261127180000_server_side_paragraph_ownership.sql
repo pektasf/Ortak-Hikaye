@@ -38,16 +38,16 @@ begin
    if char_length(v_item->>'content')>50000 then raise exception 'Tek paragraf en fazla 50.000 karakter olabilir.'; end if;
    v_id:=nullif(v_item->>'id','')::uuid;
    if v_id is not null and not exists(select 1 from public.chapter_blocks b where b.id=v_id and b.chapter_id=p_chapter_id) then raise exception 'Paragraf bu bölüme ait değil.'; end if;
-   v_content:=v_content||case when v_position=0 then '' else E'\\n\\n' end||(v_item->>'content');
+   v_content:=v_content||case when v_position=0 then '' else E'\n\n' end||(v_item->>'content');
    v_position:=v_position+1;
  end loop;
- v_words:=case when btrim(v_content)='' then 0 else cardinality(regexp_split_to_array(btrim(v_content),'\\s+')) end;
+ v_words:=case when btrim(v_content)='' then 0 else cardinality(regexp_split_to_array(btrim(v_content),'\s+')) end;
  if v_words>v_chapter.target_words then raise exception 'Bölüm kelime sınırı aşıldı. Hedef: % kelime.',v_chapter.target_words; end if;
  select * into v_story from public.stories where id=v_chapter.story_id;
  select * into v_book from public.books where id=v_story.book_id;
- select coalesce(sum(case when c.id=p_chapter_id then v_words else cardinality(regexp_split_to_array(nullif(btrim(c.content),''),'\\s+')) end),0) into v_total_story from public.chapters c where c.story_id=v_story.id;
+ select coalesce(sum(case when c.id=p_chapter_id then v_words else cardinality(regexp_split_to_array(nullif(btrim(c.content),''),'\s+')) end),0) into v_total_story from public.chapters c where c.story_id=v_story.id;
  if v_total_story>v_story.target_words then raise exception 'Hikâye kelime sınırı aşıldı. Hedef: % kelime.',v_story.target_words; end if;
- select coalesce(sum(case when c.id=p_chapter_id then v_words else cardinality(regexp_split_to_array(nullif(btrim(c.content),''),'\\s+')) end),0) into v_total_book from public.chapters c join public.stories s on s.id=c.story_id where s.book_id=v_book.id;
+ select coalesce(sum(case when c.id=p_chapter_id then v_words else cardinality(regexp_split_to_array(nullif(btrim(c.content),''),'\s+')) end),0) into v_total_book from public.chapters c join public.stories s on s.id=c.story_id where s.book_id=v_book.id;
  if v_total_book>v_book.target_words+v_book.extension_words then raise exception 'Kitap kelime sınırı aşıldı. İzin verilen toplam: % kelime.',v_book.target_words+v_book.extension_words; end if;
 
  update public.chapters set title=btrim(p_title),content=v_content,status=p_status,updated_at=now() where id=p_chapter_id returning * into v_chapter;

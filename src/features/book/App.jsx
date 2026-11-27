@@ -418,7 +418,11 @@ export default function App() {
       } else acquire();
     }, 12000);
     const channel = supabase.channel('chapter-lock-' + activeChapterId)
-      .on('postgres_changes', { event:'*', schema:'public', table:'chapter_writing_locks', filter:'chapter_id=eq.' + activeChapterId }, () => acquire())
+      .on('postgres_changes', { event:'*', schema:'public', table:'chapter_writing_locks', filter:'chapter_id=eq.' + activeChapterId }, () => {
+        // Re-check only while waiting for another writer. Our own release event
+        // must never trigger a fresh acquire and immediately hide the saved chapter.
+        if (alive && !ownsLock) acquire();
+      })
       .subscribe();
     return () => {
       alive=false;

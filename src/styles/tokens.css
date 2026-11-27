@@ -1,0 +1,11 @@
+/* Ortak Roman design tokens — hybrid: literary book + restrained product UI */
+:root {
+  color-scheme: light;
+  --color-ink: #30271e;
+  --color-paper: #f5eddd;
+  --color-paper-ui: #faf8f3;
+  --color-leather: #4b2c1e;
+  --color-accent: #98643b;
+  --font-reading: 'EB Garamond', Georgia, serif;
+  --font-ui: 'DM Sans', Arial, sans-serif;
+}

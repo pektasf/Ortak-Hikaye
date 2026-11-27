@@ -354,9 +354,8 @@ export default function App() {
       const { data, error } = await supabase.from('chapter_writing_locks').select('chapter_id,user_id,expires_at').in('chapter_id', ids).gt('expires_at', new Date().toISOString());
       if (error) { if (alive) setNotice('Yazma durumu alınamadı: ' + error.message); return; }
       const rows = data || [];
-      const userIds = [...new Set(rows.map(item => item.user_id).filter(Boolean))];
-      const profilesResult = userIds.length ? await supabase.from('profiles').select('id,display_name').in('id', userIds) : {data:[]};
-      const names = Object.fromEntries((profilesResult.data || []).map(item => [item.id, item.display_name || 'Bir yazar']));
+      const { data: authors } = await supabase.rpc('get_story_author_names', { p_chapter_id: ids[0] });
+      const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name || 'Bir yazar']));
       const next = Object.fromEntries(rows.map(item => [item.chapter_id, {user_id:item.user_id,display_name:names[item.user_id] || 'Bir yazar',expires_at:item.expires_at}]));
       if (alive) setActiveWritingLocks(next);
     };

@@ -1,50 +1,71 @@
-# Ortak Roman — Proje Mimarisi
+# Ortak Roman — Teknik Mimari
 
-## Ürün kararları
-- Katılım davet bağlantısıyla yapılır.
+## Ürün ve erişim modeli
 - Bir kitap birden fazla hikâye içerir; her hikâye bölümlere ayrılır.
-- Hikâye sahibi ve hikâye yazarları, yalnızca üyesi oldukları hikâyeye davet gönderebilir.
-- Davetle katılan kişi global yönetici olmaz; hikâye düzeyinde yazar üyeliği alır.
-- Okuma deneyimi kitap düzeninde; yönetim ve yazarlık arayüzü sade ve erişilebilir olur.
+- Her yazar kendi hikâyesini oluşturabilir.
+- Hikâyeye davet edilen yazar yalnızca davet edildiği hikâyeye katılır; global yönetici olmaz.
+- Her hikâye üyesi aynı hikâyenin bölümlerini oluşturabilir ve düzenleyebilir.
+- Bölüm silme ve hikâye yönetimi hikâye sahibine aittir.
+- Davet bağlantısı 7 gün geçerlidir; token'ın yalnızca SHA-256 özeti saklanır.
+- Eski kitap-geneli yazım akışı devre dışıdır; tarihsel tablolar veri kaybını önlemek için korunur.
 
-## Katmanlar
-
+## Uygulama katmanları
 ```text
-Browser
-  └─ React UI (src/)
-      ├─ features/book       Uygulama kabuğu ve mevcut yazma alanı
-      ├─ components          Paylaşılan arayüz parçaları
-      ├─ config              Ürün varsayılanları
-      ├─ lib/supabase        Supabase istemcisi
-      └─ styles              Tasarım tokenları ve global stiller
+React / Vite
+  ├─ features/book/App.jsx       Hikâye kütüphanesi, bölüm listesi, editör
+  ├─ components/setup            Supabase kurulum ekranı
+  ├─ lib/supabase                İstemci ve oturum
+  └─ styles                      Kitap odaklı arayüz
 
 Supabase
-  ├─ Auth                   E-posta OTP ve oturum
-  ├─ Postgres               Profil, kitap, hikâye, bölüm, üyelik, davet
-  ├─ Realtime               Mevcut ortak yazım akışındaki canlı güncellemeler
-  └─ RLS + RPC              Veri erişimi ve davet doğrulaması
+  ├─ Auth                        E-posta OTP
+  ├─ public.stories              Hikâyeler
+  ├─ public.chapters             Bölüm metinleri
+  ├─ public.story_members        Hikâye bazlı üyelik/rol
+  ├─ public.story_invites        Hash'lenmiş davetler
+  ├─ public.chapter_revisions    Önceki bölüm sürümleri
+  ├─ public.reading_progress     Kullanıcının hikâye içindeki son bölümü
+  ├─ private.*                   RLS için API'ye açılmayan yetki yardımcıları
+  └─ RLS + RPC                   Sunucu tarafı erişim sınırları
 
-GitHub
-  ├─ Source                 Uygulama ve SQL migration geçmişi
-  └─ Actions / Pages        Derleme ve statik yayın
+GitHub Actions → GitHub Pages
+  └─ Vite production build ve statik dağıtım
 ```
 
 ## Veritabanı adlandırma standardı
-- Tablo ve kolonlar İngilizce, `snake_case`; tekil varlık adları tablo adı olarak kullanılır.
-- Birincil anahtarlar `id`; ilişkiler `<entity>_id`; zaman alanları `created_at`, `updated_at`.
-- Bağlantı tabloları `story_members` gibi iki varlığın adını taşır.
-- Davet token'ları düz metin saklanmaz; yalnızca SHA-256 özeti saklanır.
-- `invites` eski kitap-geneli davet akışıdır; `story_invites` hikâye kapsamındaki davet akışıdır. İkisi henüz tek modele taşınmamıştır.
-- `story_entries`, `writing_locks` ve `story_votes` eski kitap-geneli yazma akışına aittir. Yeni `stories`/`chapters` modeliyle tam birleştirme henüz tamamlanmamıştır; bu nedenle eski tablolar silinmemeli veya yeniden adlandırılmamalıdır.
+- Tablo ve kolonlar İngilizce `snake_case` kullanır.
+- Tekil varlık adları tablo adı olarak kullanılır: `stories`, `chapters`.
+- Birincil anahtar `id`; yabancı anahtar `<entity>_id`.
+- Zaman alanları `created_at`, `updated_at`; üyelik zamanı `joined_at`.
+- Bağlantı tabloları iki varlığın adını taşır: `story_members`.
+- Her tablo için RLS açık olmalı; istemci yetkileri en az ayrıcalık ilkesine göre verilir.
+
+## Veri ilişkileri
+- `books 1—N stories`
+- `stories 1—N chapters`
+- `stories N—N profiles` ilişkisi `story_members` üzerinden kurulur.
+- `stories 1—N story_invites`
+- `chapters 1—N chapter_revisions`
+- `profiles 1—N reading_progress`; her kullanıcı-hikâye çifti için tek kayıt.
 
 ## Güvenlik sınırları
-- Arayüzde buton gizlemek yetkilendirme değildir; her işlem RLS veya kontrollü RPC ile korunur.
-- `service_role` / secret API key tarayıcıya veya Vite değişkenlerine konmaz.
-- `invites` ve `story_invites` tablolarına doğrudan istemci erişimi verilmez; token işlemleri RPC üzerinden yürütülür.
-- Trigger amaçlı SECURITY DEFINER fonksiyonları istemciden çağrılamaz.
-- Hikâye üyeliğinin eski kitap-geneli erişimden tamamen ayrılması ve bölüm katkı akışının yeni modele taşınması sonraki refaktör aşamasıdır.
+- Hikâye erişiminin kaynağı `story_members` üyeliğidir; `profiles.access_granted` yeni hikâye erişiminde kullanılmaz.
+- Davet redeem işlemi yalnızca ilgili hikâyeye `writer` üyeliği ekler; global erişim veya yönetici rolü vermez.
+- Her hikâye üyesi yalnızca üyesi olduğu hikâyeyi ve bölümlerini görebilir.
+- Bölüm oluşturma/düzenleme hikâye üyelerine, silme hikâye sahibine aittir.
+- Okuma ilerlemesi yalnızca kaydı oluşturan kullanıcı tarafından okunup güncellenebilir.
+- Policy helper fonksiyonları `private` şemasındadır; PostgREST'in public API yüzeyine açılmaz.
+- `create_story_invite` ve `redeem_story_invite` bilinçli olarak sunucu yetkili RPC uçlarıdır; girdileri ve üyelik koşulları fonksiyon içinde doğrulanır.
+- `service_role` anahtarı istemciye veya Vite değişkenlerine konmaz.
 
-## Migration yaklaşımı
-- Yeni şema değişiklikleri `supabase/migrations/` altında geriye dönük uyumlu SQL ile tutulur.
-- Canlı veritabanına uygulanan her migration aynı SQL ile depoda da saklanır.
-- `supabase/schema.sql` yalnızca yeni kurulum için tam bootstrap dosyasıdır; canlı projede migration geçmişinin yerine kullanılmaz.
+## Eski şemanın durumu
+- `story_entries`, `writing_locks`, `story_votes` ve kitap-geneli `invites` artık istemciden okunamaz/yazılamaz; ilgili RPC izinleri kaldırılmıştır.
+- Migration sırasında eski `story_entries` kayıtları varsa `Ortak Roman — Arşiv` hikâyesine bölüm olarak aktarılır.
+- Eski tablolar fiziksel olarak silinmez. Veri bütünlüğü ve geri dönüş için arşiv olarak tutulur.
+- `profiles.access_granted` kolonu eski hesapların geçmişi için korunur; yeni erişim denetiminin yerine geçmez.
+
+## Migration ilkesi
+- Her canlı şema değişikliği `supabase/migrations/` altında SQL olarak saklanır.
+- `supabase/schema.sql` yeni Supabase projesi için tam bootstrap dosyasıdır.
+- Mevcut projede bootstrap dosyası tekrar çalıştırılmaz; yalnızca eksik migration uygulanır.
+- Migration'lar veri silmeden ve geriye dönük uyumu gözeterek hazırlanır.

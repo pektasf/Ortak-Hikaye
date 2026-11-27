@@ -26,10 +26,14 @@ Yayın, Supabase ve GitHub Actions yapılandırmasına ihtiyaç duyar. Adım ad�
 4. Repository Settings → Pages → Source: **GitHub Actions**.
 5. `main` dalına yapılan her push otomatik derlenir ve yayınlanır.
 
-**Güvenlik:** Supabase `service_role` anahtarını hiçbir zaman frontend'e veya GitHub Actions secrets üzerinden Vite build'ine vermeyin. Yalnızca anon/public key kullanılır. Davet token'ları veritabanında SHA-256 özeti olarak saklanır ve RLS içerikleri yetkisiz hesaplardan gizler.
+**Güvenlik:** Supabase `service_role` anahtarını hiçbir zaman frontend'e veya GitHub Actions secrets üzerinden Vite build'ine vermeyin. Yalnızca anon/public key kullanılır. Davet token'ları veritabanında SHA-256 özeti olarak saklanır. Yeni erişim modeli hikâye üyeliğine dayanır; davet global erişim veya yönetici rolü vermez. RLS, üye olmayan hesapların hikâye ve bölüm içeriğini görmesini engeller.
 
 ## Geliştirme
 Node.js 22+, `npm install`, `.env.example` dosyasını `.env` olarak kopyalama ve `npm run dev`.
 
 ## Durum
 GitHub Actions dağıtım workflow'u ve davet doğrulama altyapısı depoda. İlk canlı kullanım için Supabase projesi, iki GitHub Actions secret'ı ve ilk sahip hesabı bootstrap adımı gerekir.
+
+## Güncel içerik mimarisi
+
+Uygulamanın ana yazım akışı artık hikâye ve bölüm bazındadır. Her hikâyenin kendi üyeleri, davetleri ve bölümleri bulunur. Bölüm değişikliklerinin önceki sürümleri saklanır; okuma ilerlemesi kullanıcı/hikâye bazında kaydedilir. Eski kitap-geneli yazım tabloları veri kaybını önlemek için korunur ancak istemci erişimine kapatılmıştır. Teknik ayrıntılar: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

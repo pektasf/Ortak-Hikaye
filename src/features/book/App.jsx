@@ -309,7 +309,7 @@ export default function App() {
         <section className="panel author-stories">
           <span className="eyebrow">YAZAR ALANI</span>
           <h2>Kendi hikâyelerini oluştur</h2>
-          <p>Her yazar kendi hikâyesini başlatabilir, başkalarını yalnızca o hikâyeye katılmaları için davet edebilir.</p>
+          <p>Her yazar kendi hikâyesini başlatabilir. Katıldığın hikâyelere de yeni yazarlar davet edebilirsin; davet yalnızca o hikâyeye erişim verir.</p>
           <form onSubmit={createStory} className="story-create-form">
             <label>Hikâye adı<input required maxLength={120} value={newStoryTitle} onChange={e => setNewStoryTitle(e.target.value)} placeholder="Hikâyenin adı" /></label>
             <label>Kısa açıklama<textarea rows={2} maxLength={600} value={newStoryDescription} onChange={e => setNewStoryDescription(e.target.value)} placeholder="Hikâyenin konusu veya başlangıç fikri..." /></label>
@@ -319,10 +319,10 @@ export default function App() {
             <h3>Hikâyelerim ve katıldıklarım</h3>
             {myStories.length ? myStories.map(story => <article className="author-story-item" key={story.id}>
               <div><strong>{story.title}</strong><p>{story.description || 'Henüz açıklama eklenmedi.'}</p><small>{story.owner_id === userId ? 'Senin hikâyen' : 'Katıldığın hikâye'}</small></div>
-              {story.owner_id === userId && <div className="story-invite-actions">
-                <button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(story.id)}>Yazar davet et</button>
-                {storyInviteLinks[story.id] && <input readOnly value={storyInviteLinks[story.id]} onFocus={e => e.target.select()} aria-label="Hikâye davet bağlantısı" />}
-              </div>}
+              <div className="story-invite-actions">
+                <button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(story.id)}>Bu hikâyeye yazar davet et</button>
+                {storyInviteLinks[story.id] && <div className="story-link-copy"><input readOnly value={storyInviteLinks[story.id]} onFocus={e => e.target.select()} aria-label="Hikâye davet bağlantısı" /><button className="button light" onClick={() => navigator.clipboard.writeText(storyInviteLinks[story.id])}>Kopyala</button></div>}
+              </div>
             </article>) : <p>Henüz bir hikâye oluşturmadın veya davetle katılmadın.</p>}
           </div>
         </section>

@@ -7,7 +7,7 @@ import '../../styles/editorial-design.css';
 import '../../styles/reader-pagination.css';
 import { findReaderAuthorBlock, findReaderParagraphOffset, getReaderParagraphCredits } from './reader-attribution.js';
 import { normalizeWriterPaste } from './writer-input.js';
-import { readWriterCanvasBlocks, validateWriterBlockOwnership } from './writer-blocks.js';
+import { readWriterCanvasBlocks, validateWriterBlockOwnership, mergeProtectedBlocksForDraft } from './writer-blocks.js';
 
 function renderHighlightedText(content, blockId, highlights) {
   const text = String(content || '');
@@ -130,6 +130,7 @@ export default function App() {
   const [editorTitle, setEditorTitle] = useState('');
   const [editorContent, setEditorContent] = useState('');
   const [editorBlocks, setEditorBlocks] = useState([]);
+  const [selectedWriterBlockIndex, setSelectedWriterBlockIndex] = useState(-1);
   const [sentenceHighlights, setSentenceHighlights] = useState([]);
   const [readerParagraphBlocks, setReaderParagraphBlocks] = useState([]);
   const [readerSelectedSentence, setReaderSelectedSentence] = useState(null);
@@ -281,7 +282,7 @@ export default function App() {
     const {data:remoteDraft,error:draftError}=await supabase.from('chapter_drafts').select('title,status,blocks,updated_at').eq('chapter_id',chapterId).eq('user_id',userId).maybeSingle();
     if(draftError)setNotice('Taslak kontrol edilemedi: '+draftError.message);
     const newest=[remoteDraft,localDraft].filter(item=>item?.updated_at&&Array.isArray(item.blocks)).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at))[0];
-    if(newest&&new Date(newest.updated_at).getTime()>new Date(chapters.find(item=>item.id===chapterId)?.updated_at||0).getTime()){setEditorTitle(newest.title||activeChapter?.title||'');setEditorStatus(newest.status||'draft');const serverBlocks=new Map(blocks.filter(item=>item.id).map(item=>[item.id,item]));const restored=newest.blocks.map(item=>{const saved=item.id?serverBlocks.get(item.id):null;if(saved&&saved.author_id!==userId)return {...item,content:saved.content,author_id:saved.author_id,author_name:saved.author_name};return {...item,author_id:saved?.author_id||userId};});setEditorBlocks(restored);setEditorContent(restored.map(item=>item.content).join('\n\n'));setEditorDirty(true);}
+    if(newest&&new Date(newest.updated_at).getTime()>new Date(chapters.find(item=>item.id===chapterId)?.updated_at||0).getTime()){setEditorTitle(newest.title||activeChapter?.title||'');setEditorStatus(newest.status||'draft');const serverBlocks=new Map(blocks.filter(item=>item.id).map(item=>[item.id,item]));const restored=mergeProtectedBlocksForDraft(newest.blocks.map(item=>{const saved=item.id?serverBlocks.get(item.id):null;if(saved&&saved.author_id!==userId)return {...saved};return {...item,id:saved?.id||null,author_id:saved?.author_id||userId,updated_by:userId};}),blocks,userId);setEditorBlocks(restored);setEditorContent(restored.map(item=>item.content).join('\n\n'));setEditorDirty(true);}
     const { data: highlights, error: highlightError } = await supabase
       .from('chapter_sentence_highlights')
       .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
@@ -550,7 +551,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [activeChapterId, activeChapter?.updated_at, editorDirty, focusMode]);
 
-  useEffect(()=>{if(!activeChapter||!userId||!editorDirty)return;if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);setDraftSaveState('pending');draftSaveTimerRef.current=window.setTimeout(async()=>{const localKey='ortak_roman_draft:'+userId+':'+activeChapter.id;const canvas=document.querySelector('.writer-rich-canvas');const currentBlocks=canvas?readWriterCanvasBlocks(canvas,userId,editorBlocks):editorBlocks;const blocks=currentBlocks.map(block=>({id:block.id||null,content:block.content,author_id:block.author_id||userId}));const updatedAt=new Date().toISOString();const draft={title:editorTitle,status:editorStatus,blocks,updated_at:updatedAt};try{window.localStorage.setItem(localKey,JSON.stringify(draft));}catch{setDraftSaveState('device-error');}const {error}=await supabase.from('chapter_drafts').upsert({chapter_id:activeChapter.id,user_id:userId,title:editorTitle.trim()||activeChapter.title,status:editorStatus,blocks,updated_at:updatedAt},{onConflict:'chapter_id,user_id'});setDraftSaveState(error?'device-only':'saved');if(error)setNotice('Taslak cihazda korundu; sunucuya eşitlenemedi: '+error.message);},1000);return()=>{if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);};},[activeChapter?.id,userId,editorDirty,editorTitle,editorStatus,editorBlocks,editorContent]);
+  useEffect(()=>{if(!activeChapter||!userId||!editorDirty)return;if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);setDraftSaveState('pending');draftSaveTimerRef.current=window.setTimeout(async()=>{const localKey='ortak_roman_draft:'+userId+':'+activeChapter.id;const canvas=document.querySelector('.writer-rich-canvas');const currentBlocks=canvas?readWriterCanvasBlocks(canvas,userId,editorBlocks):editorBlocks;const safeDraftBlocks=mergeProtectedBlocksForDraft(currentBlocks,editorBlocks,userId);const blocks=safeDraftBlocks.map(block=>({id:block.id||null,content:block.content,author_id:block.author_id||userId}));const updatedAt=new Date().toISOString();const draft={title:editorTitle,status:editorStatus,blocks,updated_at:updatedAt};try{window.localStorage.setItem(localKey,JSON.stringify(draft));}catch{setDraftSaveState('device-error');}const {error}=await supabase.from('chapter_drafts').upsert({chapter_id:activeChapter.id,user_id:userId,title:editorTitle.trim()||activeChapter.title,status:editorStatus,blocks,updated_at:updatedAt},{onConflict:'chapter_id,user_id'});setDraftSaveState(error?'device-only':'saved');if(error)setNotice('Taslak cihazda korundu; sunucuya eşitlenemedi: '+error.message);},1000);return()=>{if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);};},[activeChapter?.id,userId,editorDirty,editorTitle,editorStatus,editorBlocks,editorContent]);
 
   useEffect(() => {
     try {
@@ -866,6 +867,41 @@ export default function App() {
     setStoryBusy(false);
   }
 
+  function applyWriterParagraphAction(action) {
+    if (!writingLock?.acquired) return;
+    const canvas = document.querySelector('.writer-rich-canvas');
+    const current = canvas ? readWriterCanvasBlocks(canvas, userId, editorBlocks) : editorBlocks;
+    const index = selectedWriterBlockIndex;
+    const next = [...current];
+    if (action === 'add') {
+      const insertAt = index >= 0 && index < next.length ? index + 1 : next.length;
+      next.splice(insertAt, 0, { id: null, content: '', author_id: userId, updated_by: userId });
+      setSelectedWriterBlockIndex(insertAt);
+    } else {
+      const selected = next[index];
+      if (!selected || selected.author_id !== userId) {
+        setNotice('Yalnızca kendi yazdığın paragrafı silebilir veya taşıyabilirsin.');
+        return;
+      }
+      if (action === 'delete') {
+        next.splice(index, 1);
+        setSelectedWriterBlockIndex(Math.min(index, next.length - 1));
+      } else {
+        const target = index + (action === 'up' ? -1 : 1);
+        if (target < 0 || target >= next.length) return;
+        [next[index], next[target]] = [next[target], next[index]];
+        setSelectedWriterBlockIndex(target);
+      }
+    }
+    const ownership = validateWriterBlockOwnership(next, editorBlocks, userId);
+    if (!ownership.valid) { setNotice(ownership.message); return; }
+    setEditorBlocks(next);
+    setEditorContent(next.map(block => block.content).filter(Boolean).join('\\n\\n'));
+    setEditorDirty(true);
+    if (action === 'add') setNotice('Yeni paragraf eklendi. Metnini yazmaya başlayabilirsin.');
+    if (action === 'delete') setNotice('Paragraf taslaktan kaldırıldı; kalıcı değişiklik kaydettiğinde uygulanacak.');
+  }
+
   async function saveChapter(event) {
     event.preventDefault();
     if (!activeChapter || !editorTitle.trim()) return;
@@ -1159,7 +1195,8 @@ export default function App() {
             </div>
             {isCompactReader && readerLayout === 'spread' && <small className="reader-responsive-note">Mobil ekranda rahat okuma için tek sayfa gösteriliyor.</small>}
           </div>
-          <div className={'reader-book reader-layout-' + effectiveReaderLayout} onMouseUp={captureSentenceSelection} onTouchEnd={captureSentenceSelection}>
+          <div className={'reader-book reader-layout-' + effectiveReaderLayout} onClick={e=>{const p=e.target.closest('p');if(p&&e.currentTarget.contains(p)){const paragraphs=Array.from(e.currentTarget.querySelectorAll(':scope > p'));setSelectedWriterBlockIndex(paragraphs.indexOf(p));}}}
+                        onMouseUp={captureSentenceSelection} onTouchEnd={captureSentenceSelection}>
             <div className="reader-running-head"><span>{book?.title || 'Ortak Roman'}</span><span>{activeStory?.title || ''}</span></div>
             <section className="reader-frontmatter">
               <span className="reader-front-kicker">ORTAK ROMAN · BİRLİKTE YAZILAN BİR KİTAP</span>
@@ -1296,7 +1333,15 @@ export default function App() {
                           <h3>{!writingPresenceReady && !focusMode ? 'Yazma durumu kontrol ediliyor…' : (writingLock?.display_name || activeWritingLocks[activeChapterId]?.display_name || 'Bir yazar') + ' şu anda yazıyor.'}</h3>
                           <p>Bu bölümün metni yazım tamamlanıp kaydedilene kadar diğer yazarlara gösterilmez.</p>
                           <span className="private-writing-lock">▣ Bölüm geçici olarak kilitli</span>
-                        </div> : !focusMode ? <div className="chapter-read-preview"><span className="eyebrow">OKUMA ÖNİZLEMESİ</span>{editorBlocks.length ? editorBlocks.map((block,index)=><p key={block.id || 'preview-'+index}>{block.content}</p>) : <p className="chapter-preview-empty">Bu bölümde henüz kaydedilmiş metin yok. Yazmaya başlamak için “Odak modunda yaz” seçeneğini kullan.</p>}</div> : <div
+                        </div> : !focusMode ? <div className="chapter-read-preview"><span className="eyebrow">OKUMA ÖNİZLEMESİ</span>{editorBlocks.length ? editorBlocks.map((block,index)=><p key={block.id || 'preview-'+index}>{block.content}</p>) : <p className="chapter-preview-empty">Bu bölümde henüz kaydedilmiş metin yok. Yazmaya başlamak için “Odak modunda yaz” seçeneğini kullan.</p>}</div> : <div className="writer-paragraph-tools" role="toolbar" aria-label="Paragraf düzenleme">
+                        <span>Paragraf işlemleri</span>
+                        <button type="button" disabled={!writingLock?.acquired} onMouseDown={e=>e.preventDefault()} onClick={()=>applyWriterParagraphAction('add')}>＋ Paragraf ekle</button>
+                        <button type="button" disabled={!writingLock?.acquired || selectedWriterBlockIndex<0 || editorBlocks[selectedWriterBlockIndex]?.author_id!==userId} onMouseDown={e=>e.preventDefault()} onClick={()=>applyWriterParagraphAction('up')} aria-label="Paragrafı yukarı taşı">↑</button>
+                        <button type="button" disabled={!writingLock?.acquired || selectedWriterBlockIndex<0 || editorBlocks[selectedWriterBlockIndex]?.author_id!==userId} onMouseDown={e=>e.preventDefault()} onClick={()=>applyWriterParagraphAction('down')} aria-label="Paragrafı aşağı taşı">↓</button>
+                        <button type="button" className="writer-paragraph-delete" disabled={!writingLock?.acquired || selectedWriterBlockIndex<0 || editorBlocks[selectedWriterBlockIndex]?.author_id!==userId} onMouseDown={e=>e.preventDefault()} onClick={()=>applyWriterParagraphAction('delete')}>Sil</button>
+                        <small>{selectedWriterBlockIndex>=0 && editorBlocks[selectedWriterBlockIndex] ? (editorBlocks[selectedWriterBlockIndex].author_id===userId ? 'Kendi paragrafın seçili' : (editorBlocks[selectedWriterBlockIndex].author_name||'Başka bir yazar')+' · Korunuyor') : 'İşlem yapmak için bir paragraf seç'}</small>
+                      </div>
+                      <div
                          className="writer-rich-canvas"
                         contentEditable={Boolean(writingLock?.acquired)}
                         suppressContentEditableWarning
@@ -1305,7 +1350,7 @@ export default function App() {
                         aria-multiline="true"
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
                         style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'Literata', 'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
-                        onInput={e=>{const nodes=readWriterCanvasBlocks(e.currentTarget,userId,editorBlocks);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
+                        onInput={e=>{const nodes=readWriterCanvasBlocks(e.currentTarget,userId,editorBlocks);setEditorBlocks(nodes);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
                          onPaste={e=>{e.preventDefault();const plainText=normalizeWriterPaste(e.clipboardData?.getData('text/plain')||'');if(plainText)document.execCommand('insertText',false,plainText);}}
                         onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();e.currentTarget.closest('form')?.requestSubmit();}}}
                         onMouseUp={captureSentenceSelection}

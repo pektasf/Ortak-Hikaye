@@ -390,7 +390,11 @@ export default function App() {
       const { data: progress } = await supabase.from('reading_progress')
         .select('chapter_id,page_index,reader_layout,scroll_position').eq('user_id', userId).eq('story_id', storyId).maybeSingle();
       const restoredChapterId=(data||[]).some(item=>item.id===progress?.chapter_id)?progress.chapter_id:(data?.[0]?.id||'');
-      setActiveChapterId(current=>(data||[]).some(item=>item.id===current)?current:restoredChapterId);
+      setActiveChapterId(current=>{
+        let savedChapter = current;
+        if (!savedChapter) { try { savedChapter = window.localStorage.getItem('ortak_roman_active_chapter') || ''; } catch {} }
+        return (data||[]).some(item=>item.id===savedChapter)?savedChapter:restoredChapterId;
+      });
       const restoredReaderIndex=(data||[]).filter(item=>String(item.content||'').trim().length>0).findIndex(item=>item.id===progress?.chapter_id);if(restoredReaderIndex>=0)setReadingIndex(restoredReaderIndex);
       if(progress?.reader_layout&&['single','spread','scroll'].includes(progress.reader_layout))setReaderLayout(progress.reader_layout);
       if(progress?.chapter_id===restoredChapterId){readerRestorePendingRef.current=true;readerPageRestoreRef.current=Math.max(0,progress.page_index||0);setReaderPageIndex(0);setReaderScrollRestore(Math.max(0,progress.scroll_position||0));}
@@ -541,8 +545,9 @@ export default function App() {
     try {
       window.localStorage.setItem('ortak_roman_view', view);
       if (activeStoryId) window.localStorage.setItem('ortak_roman_active_story', activeStoryId);
+      if (activeChapterId) window.localStorage.setItem('ortak_roman_active_chapter', activeChapterId);
     } catch {}
-  }, [view, activeStoryId]);
+  }, [view, activeStoryId, activeChapterId]);
 
   useEffect(() => {
     if (activeStory) setStoryTitleDraft(activeStory.title || '');

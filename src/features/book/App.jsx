@@ -50,7 +50,7 @@ export default function App() {
     if (error) { setNotice('Paragraflar yüklenemedi: ' + error.message); return; }
     const { data: authors } = await supabase.rpc('get_story_author_names', { p_chapter_id: chapterId });
     const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name]));
-    const blocks = (data || []).map(block => ({...block,author_name:names[block.author_id] || (block.author_id ? 'Yazar' : 'Eski metin')}));
+    const blocks = (data || []).map(block => ({...block,author_name:names[block.author_id] || (block.author_id ? 'Yazar' : 'Eski metin'),editor_name:names[block.updated_by] || 'Yazar'}));
     setEditorBlocks(blocks);
     setEditorContent(blocks.map(block => block.content).join('\n\n') || '');
   }
@@ -557,7 +557,7 @@ export default function App() {
                           const next = editorBlocks.map((item, i) => i === index ? {...item,content:e.target.value} : item);
                           setEditorBlocks(next); setEditorContent(next.map(item => item.content).join('\n\n')); setEditorDirty(true);
                         }} placeholder="Paragrafını buraya yaz…" aria-label={'Paragraf ' + (index + 1)}/>
-                        <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id === userId ? 'Sen yazdın' : block.author_name) : 'Eski metin · Yazarı henüz belirlenmemiş'} · {words(block.content)} kelime</span>
+                        <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id === userId ? 'İlk yazar: Sen' : 'İlk yazar: ' + block.author_name) : 'Eski metin · İlk yazarı bilinmiyor'}{block.updated_by && block.updated_by !== block.author_id ? ' · Son düzenleyen: ' + (block.updated_by === userId ? 'Sen' : block.editor_name) : ''} · {words(block.content)} kelime</span>
                           <button type="button" className="text-button danger" onClick={() => {const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item => item.content).join('\n\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
                         </div>
                       </div>)}

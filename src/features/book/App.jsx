@@ -48,6 +48,16 @@ function renderReaderHighlightedText(content, highlights) {
   return nodes;
 }
 
+function findReaderAuthorBlock(paragraph, blocks) {
+  const normalize = value => String(value || '').replace(/\\r/g, '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
+  const target = normalize(paragraph);
+  if (!target) return null;
+  const candidates = (blocks || []).map(block => ({ block, text: normalize(block.content) })).filter(item => item.text);
+  return candidates.find(item => item.text === target)?.block
+    || candidates.find(item => item.text.includes(target) || target.includes(item.text))?.block
+    || null;
+}
+
 function readWriterCanvasBlocks(root, userId) {
   if (!root) return [];
   const nodes = Array.from(root.childNodes || []);
@@ -1160,7 +1170,7 @@ export default function App() {
             </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
               <article className="reader-page-sheet page-left">
                 <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}{readerChapter.status!=='published'?' · ÇALIŞMA NÜSHASI':''}</span>
-                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const block=readerParagraphBlocks.find(item=>item.content===normalized);return <p className="reader-attributed-text" key={index} data-author={block?.author_name || 'Yazar bilgisi bulunamadı'} data-block-id={block?.id || undefined}><span className="reader-author-hover" title={(block?.author_name || 'Yazar bilgisi bulunamadı') + ' yazdı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</span></p>;})}</div>
+                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=>{const normalized=String(paragraph||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trim();const block=findReaderAuthorBlock(normalized,readerParagraphBlocks);return <p className="reader-attributed-text" key={index} data-author={block?.author_name || 'Yazar bilgisi bulunamadı'} data-block-id={block?.id || undefined}><span className="reader-author-hover" title={(block?.author_name || 'Yazar bilgisi bulunamadı') + ' yazdı'}>{renderReaderHighlightedText(paragraph, sentenceHighlights)}</span></p>;})}</div>
                 <span className="reader-page-number">{readerPageIndex+1}</span>
               </article>
               <article className="reader-page-sheet page-right">

@@ -105,7 +105,7 @@ create policy "moderators update books" on public.books for update to authentica
 drop policy if exists "entries readable" on public.story_entries;
 create policy "entries readable" on public.story_entries for select to anon,authenticated using(true);
 drop policy if exists "writers insert own entry while holding lock" on public.story_entries;
-create policy "writers insert own entry while holding lock" on public.story_entries for insert to authenticated with check(user_id=auth.uid() and exists(select 1 from public.writing_locks l where l.id=1 and l.user_id=auth.uid() and l.expires_at>now()) and (select count(*) from regexp_split_to_table(trim(content), '\\s+') as token where token <> '') <= 200);
+create policy "writers insert own entry while holding lock" on public.story_entries for insert to authenticated with check(user_id=auth.uid() and exists(select 1 from public.writing_locks l where l.id=1 and l.user_id=auth.uid() and l.expires_at>now()) and (select count(*) from regexp_split_to_table(trim(content), E'\\s+') as token where token <> '') <= 200);
 drop policy if exists "moderators delete entries" on public.story_entries;
 create policy "moderators delete entries" on public.story_entries for delete to authenticated using(public.is_moderator());
 

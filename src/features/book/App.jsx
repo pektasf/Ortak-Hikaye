@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase/client.js';
 import { words } from '../../lib/text.js';
 import SetupScreen from '../../components/setup/SetupScreen.jsx';
 import '../../styles/global.css';
+import '../../styles/reader-pagination.css';
 
 function renderHighlightedText(content, blockId, highlights) {
   const text = String(content || '');
@@ -26,32 +27,29 @@ function renderHighlightedText(content, blockId, highlights) {
   return nodes;
 }
 
-function paginateBookText(value, wordsPerPage = 175) {
-  const paragraphs = String(value || '').split(/\n\s*\n/).map(item => item.trim()).filter(Boolean);
-  const pages = [];
-  let page = [];
-  let pageWordCount = 0;
-  const flush = () => {
-    if (page.length) pages.push(page.join('\n\n'));
-    page = [];
-    pageWordCount = 0;
-  };
-  for (const paragraph of paragraphs) {
-    const tokens = paragraph.split(/\s+/);
-    let part = [];
-    for (const token of tokens) {
-      if (pageWordCount >= wordsPerPage) {
-        if (part.length) { page.push(part.join(' ')); part = []; }
-        flush();
-      }
-      part.push(token);
-      pageWordCount += 1;
-    }
-    if (part.length) page.push(part.join(' '));
-    if (pageWordCount >= wordsPerPage) flush();
+function measureBookPages(value, element) {
+ const paragraphs=String(value||'').split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);
+ if(!paragraphs.length||!element||!element.clientWidth||!element.clientHeight)return [];
+ const probe=element.cloneNode(false),rect=element.getBoundingClientRect();
+ Object.assign(probe.style,{position:'fixed',left:'-10000px',top:'0',visibility:'hidden',display:'block',width:rect.width+'px',height:element.clientHeight+'px',overflow:'hidden',contain:'layout style paint',pointerEvents:'none'});
+ document.body.appendChild(probe);
+ const fits=text=>{const p=document.createElement('p');p.textContent=text;probe.appendChild(p);const ok=probe.scrollHeight<=probe.clientHeight+1;p.remove();return ok;};
+ const pages=[];let page=[];
+ const flush=()=>{if(page.length)pages.push(page.join('\n\n'));page=[];};
+ const append=text=>{const p=document.createElement('p');p.textContent=text;probe.appendChild(p);page.push(text);};
+ for(const paragraph of paragraphs){
+  if(fits(paragraph)){append(paragraph);continue;}
+  let rest=paragraph.split(/\s+/);
+  while(rest.length){
+   let low=1,high=rest.length,best=0;
+   while(low<=high){const mid=Math.floor((low+high)/2);if(fits(rest.slice(0,mid).join(' '))){best=mid;low=mid+1;}else high=mid-1;}
+   if(!best){if(page.length){flush();probe.innerHTML='';continue;}best=1;}
+   const part=rest.slice(0,best).join(' ');
+   if(page.length&&!fits(part)){flush();probe.innerHTML='';continue;}
+   append(part);rest=rest.slice(best);if(rest.length){flush();probe.innerHTML='';}
   }
-  flush();
-  return pages;
+ }
+ flush();probe.remove();return pages;
 }
 
 export default function App() {
@@ -101,6 +99,13 @@ export default function App() {
   const [writingLineHeight, setWritingLineHeight] = useState('1.9');
   const [readerLayout, setReaderLayout] = useState('spread');
   const [readerPageIndex, setReaderPageIndex] = useState(0);
+  const [readerPages, setReaderPages] = useState([]);
+  const readerPageMeasureRef = useRef(null);
+  const readerProgressTimerRef = useRef(null);
+  const [readerScrollRestore, setReaderScrollRestore] = useState(0);
+  const [draftSaveState, setDraftSaveState] = useState('idle');
+  const draftSaveTimerRef = useRef(null);
+  const draftRestorePromptRef = useRef(new Set());
   const [readerTurn, setReaderTurn] = useState(null);
   const [isCompactReader, setIsCompactReader] = useState(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
@@ -115,9 +120,9 @@ export default function App() {
   const isStoryOwner = Boolean(activeStory && activeStory.owner_id === userId);
   const readerChapters = chapters.filter(item => item.status === 'published');
   const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
-  const readerPages = paginateBookText(readerChapter?.content || '');
   const effectiveReaderLayout = isCompactReader && readerLayout === 'spread' ? 'single' : readerLayout;
   const readerPageStep = effectiveReaderLayout === 'spread' ? 2 : 1;
+  useEffect(()=>{if(view!=='reader'||effectiveReaderLayout==='scroll')return;let frame=0;const measure=()=>{window.cancelAnimationFrame(frame);frame=window.requestAnimationFrame(()=>setReaderPages(measureBookPages(readerChapter?.content||'',readerPageMeasureRef.current)));};measure();const el=readerPageMeasureRef.current;const observer=typeof ResizeObserver!=='undefined'&&el?new ResizeObserver(measure):null;if(observer&&el)observer.observe(el);window.addEventListener('resize',measure,{passive:true});document.fonts?.ready?.then(measure);return()=>{window.cancelAnimationFrame(frame);observer?.disconnect();window.removeEventListener('resize',measure);};},[view,readerChapter?.id,readerChapter?.content,effectiveReaderLayout]);
   const readerMaxPageIndex = effectiveReaderLayout === 'spread'
     ? Math.max(0, Math.ceil(readerPages.length / 2) * 2 - 2)
     : Math.max(0, readerPages.length - 1);
@@ -192,6 +197,11 @@ export default function App() {
     const blocks = (data || []).map(block => ({...block,author_name:names[block.author_id] || (block.author_id ? 'Yazar' : 'Eski metin'),editor_name:names[block.updated_by] || 'Yazar'}));
     setEditorBlocks(blocks);
     setEditorContent(blocks.map(block => block.content).join('\n\n') || '');
+    const localKey='ortak_roman_draft:'+userId+':'+chapterId;let localDraft=null;try{localDraft=JSON.parse(window.localStorage.getItem(localKey)||'null');}catch{localDraft=null;}
+    const {data:remoteDraft,error:draftError}=await supabase.from('chapter_drafts').select('title,status,blocks,updated_at').eq('chapter_id',chapterId).eq('user_id',userId).maybeSingle();
+    if(draftError)setNotice('Taslak kontrol edilemedi: '+draftError.message);
+    const newest=[remoteDraft,localDraft].filter(item=>item?.updated_at&&Array.isArray(item.blocks)).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at))[0];
+    if(newest&&new Date(newest.updated_at).getTime()>new Date(activeChapter?.updated_at||0).getTime()&&!draftRestorePromptRef.current.has(chapterId)){draftRestorePromptRef.current.add(chapterId);if(window.confirm('Bu bölüm için daha yeni bir taslak bulundu. Taslağı geri yüklemek ister misin?')){setEditorTitle(newest.title||activeChapter?.title||'');setEditorStatus(newest.status||'draft');const restored=newest.blocks.map(item=>({...item,author_id:item.author_id||userId}));setEditorBlocks(restored);setEditorContent(restored.map(item=>item.content).join('\n\n'));setEditorDirty(true);}}
     const { data: highlights, error: highlightError } = await supabase
       .from('chapter_sentence_highlights')
       .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
@@ -275,10 +285,11 @@ export default function App() {
     else {
       setChapters(data || []);
       const { data: progress } = await supabase.from('reading_progress')
-        .select('chapter_id').eq('user_id', userId).eq('story_id', storyId).maybeSingle();
-      setActiveChapterId(current => (data || []).some(item => item.id === current)
-        ? current
-        : ((data || []).some(item => item.id === progress?.chapter_id) ? progress.chapter_id : (data?.[0]?.id || '')));
+        .select('chapter_id,page_index,reader_layout,scroll_position').eq('user_id', userId).eq('story_id', storyId).maybeSingle();
+      const restoredChapterId=(data||[]).some(item=>item.id===progress?.chapter_id)?progress.chapter_id:(data?.[0]?.id||'');
+      setActiveChapterId(current=>(data||[]).some(item=>item.id===current)?current:restoredChapterId);
+      if(progress?.reader_layout&&['single','spread','scroll'].includes(progress.reader_layout))setReaderLayout(progress.reader_layout);
+      if(progress?.chapter_id===restoredChapterId){setReaderPageIndex(Math.max(0,progress.page_index||0));setReaderScrollRestore(Math.max(0,progress.scroll_position||0));}
     }
   }
 
@@ -304,16 +315,7 @@ export default function App() {
     refreshChapters(activeStoryId);
   }, [activeStoryId, authorized]);
 
-  useEffect(() => {
-    if (!authorized || !userId || !activeStoryId || !activeChapterId) return;
-    const chapter = chapters.find(item => item.id === activeChapterId);
-    if (!chapter || chapter.story_id !== activeStoryId) return;
-    supabase.from('reading_progress').upsert({
-      user_id: userId, story_id: activeStoryId, chapter_id: activeChapterId, scroll_position: 0
-    }, { onConflict: 'user_id,story_id' }).then(({ error }) => {
-      if (error) setNotice('Okuma konumu kaydedilemedi: ' + error.message);
-    });
-  }, [activeChapterId, activeStoryId, authorized, userId, chapters]);
+  useEffect(()=>{if(!authorized||!userId||!activeStoryId||!readerChapter||view!=='reader')return;if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(async()=>{const sheet=document.querySelector('.reader-scroll-sheet');const scrollPosition=effectiveReaderLayout==='scroll'?Math.max(0,Math.round(sheet?.scrollTop||0)):0;const {error}=await supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:readerPageIndex,reader_layout:readerLayout,scroll_position:scrollPosition},{onConflict:'user_id,story_id'});if(error)setNotice('Okuma konumu kaydedilemedi: '+error.message);},350);return()=>{if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);};},[readerPageIndex,readerLayout,readingIndex,readerChapter?.id,activeStoryId,authorized,userId,view,effectiveReaderLayout]);
 
   useEffect(() => {
     if (!authorized || !focusMode || !activeChapterId || !userId) { setWritingLock(null); return; }
@@ -385,6 +387,8 @@ export default function App() {
     });
     return () => { cancelled = true; };
   }, [activeChapterId, activeChapter?.updated_at, editorDirty]);
+
+  useEffect(()=>{if(!activeChapter||!userId||!editorDirty)return;if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);setDraftSaveState('pending');draftSaveTimerRef.current=window.setTimeout(async()=>{const localKey='ortak_roman_draft:'+userId+':'+activeChapter.id;const blocks=editorBlocks.map(block=>({id:block.id||null,content:block.content,author_id:block.author_id||userId}));const updatedAt=new Date().toISOString();const draft={title:editorTitle,status:editorStatus,blocks,updated_at:updatedAt};try{window.localStorage.setItem(localKey,JSON.stringify(draft));}catch{setDraftSaveState('device-error');}const {error}=await supabase.from('chapter_drafts').upsert({chapter_id:activeChapter.id,user_id:userId,title:editorTitle.trim()||activeChapter.title,status:editorStatus,blocks,updated_at:updatedAt},{onConflict:'chapter_id,user_id'});setDraftSaveState(error?'device-only':'saved');if(error)setNotice('Taslak cihazda korundu; sunucuya eşitlenemedi: '+error.message);},1000);return()=>{if(draftSaveTimerRef.current)window.clearTimeout(draftSaveTimerRef.current);};},[activeChapter?.id,userId,editorDirty,editorTitle,editorStatus,editorBlocks,editorContent]);
 
   useEffect(() => {
     if (!book || settingsDirty) return;
@@ -647,7 +651,7 @@ export default function App() {
     else {
       setChapters(items => items.map(item => item.id === data.id ? data : item));
       await loadChapterBlocks(activeChapter.id);
-      setEditorDirty(false);
+      setEditorDirty(false);setDraftSaveState('idle');window.localStorage.removeItem('ortak_roman_draft:'+userId+':'+activeChapter.id);await supabase.from('chapter_drafts').delete().eq('chapter_id',activeChapter.id).eq('user_id',userId);
       setNotice('Bölüm kaydedildi. Paragraf katkıları yazarlarla eşleştirildi.');
     }
     setBusy(false);
@@ -757,6 +761,8 @@ export default function App() {
   const storyWordCount = chapters.reduce((sum,item) => sum + words(item.id === activeChapterId ? editorContent : (item.content || '')),0);
   const chapterWordLimit = activeChapter?.target_words || 1000;
   const chapterOverLimit = Boolean(activeChapter && words(editorContent) > chapterWordLimit);
+  useEffect(()=>{if(view!=='reader'||effectiveReaderLayout!=='scroll'||!readerScrollRestore)return;const sheet=document.querySelector('.reader-scroll-sheet');if(sheet){sheet.scrollTop=readerScrollRestore;setReaderScrollRestore(0);}},[view,effectiveReaderLayout,readerChapter?.id,readerScrollRestore]);
+
   function turnBookPage(direction) {
     if (readerTurn || readerTurnTimerRef.current !== null || effectiveReaderLayout === 'scroll' || !readerPages.length) return;
     const nextIndex = readerPageIndex + direction * readerPageStep;
@@ -846,13 +852,13 @@ export default function App() {
           </div>
           <div className={'reader-book reader-layout-' + effectiveReaderLayout}>
             <div className="reader-running-head"><span>{book?.title || 'Ortak Roman'}</span><span>{activeStory?.title || ''}</span></div>
-            {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Bu kitapta henüz yayınlanmış bölüm yok.</h2><p>Bir bölüm yayınlandığında burada okunabilir.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet">
+            {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Bu kitapta henüz yayınlanmış bölüm yok.</h2><p>Bir bölüm yayınlandığında burada okunabilir.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
               <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')}</span><h1>{readerChapter.title}</h1>
               <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
             </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
               <article className="reader-page-sheet page-left">
                 <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}</span>
-                <div className="reader-page-prose">{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
+                <div className="reader-page-prose" ref={readerPageMeasureRef}>{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
                 <span className="reader-page-number">{readerPageIndex+1}</span>
               </article>
               <article className="reader-page-sheet page-right">
@@ -930,7 +936,7 @@ export default function App() {
                     <div className="editor-toolbar">
                       {focusMode ? <div className="writer-studio-brand"><button type="button" className="writer-back-button" onClick={exitWritingStudio} aria-label="Çalışma alanına dön">←</button><div><span className="writer-studio-book">{activeStory?.title || 'Ortak Roman'}</span><strong>{editorTitle || 'Yeni bölüm'}</strong></div></div> : <span className="eyebrow">BÖLÜM DÜZENLEYİCİ</span>}
                       <div className="writer-toolbar-actions">
-                        <span className="save-state">{editorDirty ? '● Kaydedilmedi' : '✓ Kaydedildi'}</span>
+                        <span className="save-state">{draftSaveState==='pending'?'Taslak kaydediliyor…':draftSaveState==='saved'?'✓ Taslak korundu':draftSaveState==='device-only'?'✓ Cihazda korundu':editorDirty?'● Kaydedilmedi':'✓ Kaydedildi'}</span>
                         {focusMode ? <button type="button" className="writer-exit-button" onClick={exitWritingStudio}>Çalışma alanına dön</button> : <button type="button" className="text-button" onClick={() => setFocusMode(true)}>⛶ Odak modunda yaz</button>}
                         {isStoryOwner && !focusMode && <button type="button" className="text-button danger" onClick={deleteChapter}>Bölümü sil</button>}
                       </div>
@@ -962,7 +968,7 @@ export default function App() {
                         aria-multiline="true"
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
                         style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'Literata', 'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
-                        onInput={e=>{setEditorContent(e.currentTarget.innerText.replace(/\r/g,'').replace(/\u00a0/g,' '));setEditorDirty(true);}}
+                        onInput={e=>{const nodes=Array.from(e.currentTarget.children).map(node=>({id:node.getAttribute('data-block-id')||null,content:String(node.innerText||node.textContent||'').replace(/\r/g,'').replace(/\u00a0/g,' ').trimEnd(),author_id:userId})).filter(block=>block.content.trim());setEditorBlocks(nodes);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
                         onMouseUp={captureSentenceSelection}
                         onKeyUp={captureSentenceSelection}
                       >

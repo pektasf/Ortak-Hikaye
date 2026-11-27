@@ -340,16 +340,13 @@ export default function App() {
         setNotice('Yazar geçmişi yüklenemedi: ' + (revisionsError || blocksError).message);
         return;
       }
-      const authorIds = [...new Set((revisionRows || []).map(item => item.editor_id).filter(Boolean))];
-      const { data: profiles, error: profilesError } = authorIds.length
-        ? await supabase.from('profiles').select('id,display_name').in('id', authorIds)
-        : { data: [], error: null };
+      const { data: authors, error: authorsError } = await supabase.rpc('get_story_author_names', { p_chapter_id: readerChapter.id });
       if (!alive) return;
-      if (profilesError) {
-        setNotice('Yazar adları yüklenemedi: ' + profilesError.message);
+      if (authorsError) {
+        setNotice('Yazar adları yüklenemedi: ' + authorsError.message);
         return;
       }
-      const names = Object.fromEntries((profiles || []).map(item => [item.id, item.display_name || 'Yazar']));
+      const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name || 'Yazar']));
       setReaderAuthorAttribution(buildRevisionAttribution(revisionRows || [], readerChapter.content || '', names));
       setReaderParagraphBlocks(String(readerChapter.content || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').split(/\n+/)
         .map(content => ({ id: null, content: content.trim(), author_name: 'Revizyon geçmişinden eşleştiriliyor' }))

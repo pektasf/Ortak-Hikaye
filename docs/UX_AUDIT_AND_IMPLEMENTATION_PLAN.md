@@ -65,7 +65,9 @@ Hikâye ayarları kaydetme akışı `theme` alanını güncelliyor; ancak çalı
 - [x] İlk renk, tipografi, ölçü, boşluk, radius, gölge ve odak tokenları tanımlandı.
 - [ ] Ortak buton, input, textarea, kart, modal, bildirim ve boş durum bileşenlerinin tamamlanması.
 - [x] Mevcut üst navigasyonun masaüstü/mobil görsel düzeni iyileştirildi; alt navigasyon ve ekran bazlı testler bekliyor.
-- [x] Ana sayfa/kitaplık için mevcut tasarımın kart, boşluk, yüzey ve mobil kırılım iyileştirmeleri yapıldı; görsel doğrulama bekliyor.
+- [x] Ana sayfa/kitaplık için kart, boşluk, yüzey ve mobil kırılım iyileştirmeleri yapıldı.
+- [x] Kitaplık kartlarına sahiplik bilgisi, hikâye sayacı ve ilk kullanım için boş durum yönlendirmesi eklendi.
+- [ ] Ana sayfa/kitaplık değişikliklerinin gerçek cihazlarda görsel doğrulaması.
 - [ ] Çalışma alanı ve hikâye ayarları.
 - [ ] Tablet/mobil uyum ve erişilebilirlik uçtan uca doğrulaması.
 

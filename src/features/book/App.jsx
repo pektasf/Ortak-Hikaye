@@ -21,14 +21,21 @@ export default function App() {
   const [settings, setSettings] = useState({ title: '', subtitle: '', note: '', target_words: 1000, extension_words: 1000 });
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [myStories, setMyStories] = useState([]);
+  const [newStoryTitle, setNewStoryTitle] = useState('');
+  const [newStoryDescription, setNewStoryDescription] = useState('');
+  const [storyBusy, setStoryBusy] = useState(false);
+  const [storyInviteLinks, setStoryInviteLinks] = useState({});
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const invite = params.get('invite');
+    const storyInvite = params.get('story_invite');
     const setup = params.get('setup');
     if (invite) window.localStorage.setItem('ortak_roman_invite', invite);
+    if (storyInvite) window.localStorage.setItem('ortak_roman_story_invite', storyInvite);
     if (setup === '1') window.localStorage.setItem('ortak_roman_bootstrap', '1');
-    if (invite || setup) window.history.replaceState({}, '', window.location.pathname);
+    if (invite || storyInvite || setup) window.history.replaceState({}, '', window.location.pathname);
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, value) => setSession(value));
@@ -45,6 +52,12 @@ export default function App() {
     }
     let active = true;
     async function checkAccess() {
+      const storyInvite = window.localStorage.getItem('ortak_roman_story_invite');
+      if (storyInvite) {
+        const { error } = await supabase.rpc('redeem_story_invite', { p_token: storyInvite });
+        window.localStorage.removeItem('ortak_roman_story_invite');
+        if (error && active) setNotice('Hikâye daveti doğrulanamadı: ' + error.message);
+      }
       const invite = window.localStorage.getItem('ortak_roman_invite');
       if (invite) {
         const { error } = await supabase.rpc('redeem_invite', { p_token: invite });
@@ -67,15 +80,18 @@ export default function App() {
 
   async function refresh() {
     if (!supabase || !session || !authorized) return;
-    const [e, b, l] = await Promise.all([
+    const [e, b, l, s] = await Promise.all([
       supabase.from('story_entries').select('*').order('created_at'),
       supabase.from('books').select('*').limit(1).maybeSingle(),
-      supabase.from('writing_locks').select('*').eq('id', 1).maybeSingle()
+      supabase.from('writing_locks').select('*').eq('id', 1).maybeSingle(),
+      supabase.from('stories').select('id,title,description,status,owner_id,created_at').order('created_at', { ascending: false })
     ]);
     if (e.error) setNotice(e.error.message);
     if (e.data) setEntries(e.data);
     if (b.data) setBook(b.data);
     if (l.data) setLock(l.data);
+    if (s.data) setMyStories(s.data);
+    else if (s.error) setNotice('Hikâyeler yüklenemedi: ' + s.error.message);
   }
 
   useEffect(() => {
@@ -173,6 +189,39 @@ export default function App() {
     setBusy(false);
   }
 
+  async function createStory(event) {
+    event.preventDefault();
+    if (!newStoryTitle.trim() || !book?.id) return;
+    setStoryBusy(true);
+    const { data, error } = await supabase.from('stories').insert({
+      book_id: book.id, owner_id: userId, title: newStoryTitle.trim(),
+      description: newStoryDescription.trim(), status: 'published'
+    }).select().single();
+    if (error) setNotice('Hikâye oluşturulamadı: ' + error.message);
+    else {
+      setMyStories(items => [data, ...items]);
+      setNewStoryTitle('');
+      setNewStoryDescription('');
+      setNotice('Hikâyen oluşturuldu. Şimdi başkalarını davet edebilirsin.');
+    }
+    setStoryBusy(false);
+  }
+
+  async function makeStoryInvite(storyId) {
+    setStoryBusy(true);
+    const { data, error } = await supabase.rpc('create_story_invite', {
+      p_story_id: storyId, p_max_uses: null, p_hours_valid: 168
+    });
+    if (error) setNotice('Hikâye daveti oluşturulamadı: ' + error.message);
+    else {
+      const url = window.location.origin + window.location.pathname + '?story_invite=' + encodeURIComponent(data);
+      setStoryInviteLinks(items => ({ ...items, [storyId]: url }));
+      try { await navigator.clipboard.writeText(url); setNotice('7 gün geçerli hikâye daveti oluşturuldu ve kopyalandı.'); }
+      catch { setNotice('Hikâye daveti oluşturuldu. Bağlantıyı aşağıdan kopyalayabilirsin.'); }
+    }
+    setStoryBusy(false);
+  }
+
   async function saveBookSettings(event) {
     event.preventDefault();
     if (role !== 'owner' || !book?.id) return;
@@ -233,6 +282,26 @@ export default function App() {
           <button className="button" disabled={busy} onClick={makeInvite}>Davet bağlantısı oluştur</button>
           {inviteLink && <div className="invite-link"><input readOnly value={inviteLink} onFocus={e => e.target.select()} /><button className="button light" onClick={() => navigator.clipboard.writeText(inviteLink)}>Kopyala</button></div>}
         </section>}
+        <section className="panel author-stories">
+          <span className="eyebrow">YAZAR ALANI</span>
+          <h2>Kendi hikâyelerini oluştur</h2>
+          <p>Her yazar kendi hikâyesini başlatabilir, başkalarını yalnızca o hikâyeye katılmaları için davet edebilir.</p>
+          <form onSubmit={createStory} className="story-create-form">
+            <label>Hikâye adı<input required maxLength={120} value={newStoryTitle} onChange={e => setNewStoryTitle(e.target.value)} placeholder="Hikâyenin adı" /></label>
+            <label>Kısa açıklama<textarea rows={2} maxLength={600} value={newStoryDescription} onChange={e => setNewStoryDescription(e.target.value)} placeholder="Hikâyenin konusu veya başlangıç fikri..." /></label>
+            <button className="button" disabled={storyBusy || !newStoryTitle.trim() || !book?.id}>{storyBusy ? 'İşleniyor…' : 'Hikâyemi oluştur'}</button>
+          </form>
+          <div className="author-story-list">
+            <h3>Hikâyelerim ve katıldıklarım</h3>
+            {myStories.length ? myStories.map(story => <article className="author-story-item" key={story.id}>
+              <div><strong>{story.title}</strong><p>{story.description || 'Henüz açıklama eklenmedi.'}</p><small>{story.owner_id === userId ? 'Senin hikâyen' : 'Katıldığın hikâye'}</small></div>
+              {story.owner_id === userId && <div className="story-invite-actions">
+                <button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(story.id)}>Yazar davet et</button>
+                {storyInviteLinks[story.id] && <input readOnly value={storyInviteLinks[story.id]} onFocus={e => e.target.select()} aria-label="Hikâye davet bağlantısı" />}
+              </div>}
+            </article>) : <p>Henüz bir hikâye oluşturmadın veya davetle katılmadın.</p>}
+          </div>
+        </section>
         {role === 'owner' && <section className="panel settings-panel">
           <span className="eyebrow">YÖNETİCİ · KİTAP AYARLARI</span>
           <h2>Romanı yapılandır</h2>

@@ -138,3 +138,10 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [x] Kitap okuyucu için merkezi cilt/gutter ve iki sayfa dengesi
 - [x] Düşük yükseklikli ekran ve mobil düzen düzeltmeleri
 - [ ] Farklı çözünürlüklerde gerçek tarayıcı görsel testi
+
+## Aşama 10 — Ortak cümle vurguları
+- [x] Yazarın seçtiği cümleyi paragraf içinde altını çizerek vurgulaması
+- [x] Cümle vurgularının tüm hikâye üyelerine görünmesi
+- [x] Yazar bazında vurgulama sayısının profil istatistiğine eklenmesi
+- [x] Metin değiştiğinde artık eşleşmeyen vurguların temizlenmesi
+- [ ] Farklı kullanıcılarla gerçek hesaplar üzerinden vurgu ve eşzamanlı yazma testi

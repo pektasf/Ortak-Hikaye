@@ -48,6 +48,35 @@ function renderReaderHighlightedText(content, highlights) {
   return nodes;
 }
 
+function normalizeAttributionText(value) {
+  return String(value || '').replace(/\r/g, '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function buildRevisionAttribution(revisions, targetContent, names) {
+  let previous = ''; let authors = []; let lastEditor = null;
+  const ordered = [...(revisions || [])].sort((a,b) => new Date(a.created_at)-new Date(b.created_at));
+  for (const revision of ordered) {
+    const next = normalizeAttributionText(revision.content); if (!next) continue;
+    const editor = revision.editor_id || lastEditor;
+    if (!previous) { previous = next; authors = Array(next.length).fill(editor); lastEditor = editor; continue; }
+    let prefix=0; while(prefix<previous.length && prefix<next.length && previous[prefix]===next[prefix]) prefix++;
+    let suffix=0; while(suffix<previous.length-prefix && suffix<next.length-prefix && previous[previous.length-1-suffix]===next[next.length-1-suffix]) suffix++;
+    authors=[...authors.slice(0,prefix),...Array(Math.max(0,next.length-prefix-suffix)).fill(editor),...(suffix?authors.slice(previous.length-suffix):[])];
+    previous=next; lastEditor=editor;
+  }
+  const target=normalizeAttributionText(targetContent);
+  if(target && target!==previous){let prefix=0;while(prefix<previous.length&&prefix<target.length&&previous[prefix]===target[prefix])prefix++;let suffix=0;while(suffix<previous.length-prefix&&suffix<target.length-prefix&&previous[previous.length-1-suffix]===target[target.length-1-suffix])suffix++;authors=[...authors.slice(0,prefix),...Array(Math.max(0,target.length-prefix-suffix)).fill(lastEditor),...(suffix?authors.slice(previous.length-suffix):[])];}
+  return {text:target,authors,names:names||{}};
+}
+
+function renderAttributedReaderText(content, attribution, highlights) {
+  const normalized=normalizeAttributionText(content); if(!normalized) return content;
+  const start=attribution?.text ? attribution.text.indexOf(normalized) : -1;
+  if(start<0) return renderReaderHighlightedText(content,highlights);
+  const nodes=[]; let cursor=0;
+  while(cursor<normalized.length){const id=attribution.authors[start+cursor]||null;let end=cursor+1;while(end<normalized.length&&(attribution.authors[start+end]||null)===id)end++;const name=attribution.names[id]||'Yazar bilgisi bulunamadı';const part=normalized.slice(cursor,end);nodes.push(<span className="reader-author-hover" title={name+' yazdı'} key={cursor}>{renderReaderHighlightedText(part,highlights)}</span>);cursor=end;}
+  return nodes;
+}
 function findReaderAuthorBlock(paragraph, blocks) {
   const normalize = value => String(value || '').replace(/\\r/g, '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').trim();
   const target = normalize(paragraph);
@@ -135,6 +164,7 @@ export default function App() {
   const [editorBlocks, setEditorBlocks] = useState([]);
   const [sentenceHighlights, setSentenceHighlights] = useState([]);
   const [readerParagraphBlocks, setReaderParagraphBlocks] = useState([]);
+  const [readerAuthorAttribution, setReaderAuthorAttribution] = useState(null);
   const [readerSelectedSentence, setReaderSelectedSentence] = useState(null);
   const [selectedSentence, setSelectedSentence] = useState(null);
   const [editorStatus, setEditorStatus] = useState('draft');

@@ -1265,6 +1265,17 @@ export default function App() {
               <span className="reader-front-kicker">ORTAK ROMAN · BİRLİKTE YAZILAN BİR KİTAP</span>
               <div className="reader-front-cover"><span className="reader-front-symbol">✦</span><h1>{book?.title || 'Ortak Roman'}</h1>{book?.subtitle && <p className="reader-front-subtitle">{book.subtitle}</p>}<div className="reader-front-rule"/><h2>{activeStory?.title || 'Hikâye'}</h2>{book?.note && <p className="reader-front-description">{book.note}</p>}<div className="reader-front-authors"><small>YAZARLAR</small><strong>{readerAuthors.length ? readerAuthors.join(' · ') : 'Ortak yazarlar'}</strong></div><small className="reader-front-date">{chapters.some(item=>item.status==='published'&&String(item.content||'').trim()) ? 'YAYIN TARİHİ · ' + new Date(chapters.filter(item=>item.status==='published'&&String(item.content||'').trim()).sort((a,b)=>new Date(a.updated_at)-new Date(b.updated_at))[0].updated_at).toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'}) : 'OLUŞTURULMA TARİHİ · ' + (activeStory?.created_at ? new Date(activeStory.created_at).toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'}) : 'Tarih belirtilmedi')}</small></div>
             </section>
+            {readerChapters.length > 1 && <nav className="reader-toc" aria-label="Kitap içindekiler">
+              <span className="eyebrow">KİTAP İÇERİĞİ</span>
+              <h2>İçindekiler</h2>
+              <ol>{readerChapters.map((chapter,index)=><li key={chapter.id}>
+                <button type="button" className={index===readingIndex?'active':''} aria-current={index===readingIndex?'page':undefined} onClick={()=>{setReadingIndex(index);setReaderPageIndex(0);}}>
+                  <span className="reader-toc-number">{String(index+1).padStart(2,'0')}</span>
+                  <span className="reader-toc-title">{chapter.title}</span>
+                  <span className="reader-toc-status">{chapter.status==='published'?'Yayında':'Çalışma nüshası'}</span>
+                </button>
+              </li>)}</ol>
+            </nav>}
             {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Henüz okunabilir kayıtlı metin yok.</h2><p>Yazarlar metinlerini kaydettikçe yayın öncesinde de burada birlikte okuyabilirsiniz.</p></div> : effectiveReaderLayout === 'scroll' ? <article className="reader-scroll-sheet" onScroll={event=>{const position=Math.max(0,Math.round(event.currentTarget.scrollTop));if(readerProgressTimerRef.current)window.clearTimeout(readerProgressTimerRef.current);readerProgressTimerRef.current=window.setTimeout(()=>supabase.from('reading_progress').upsert({user_id:userId,story_id:activeStoryId,chapter_id:readerChapter.id,page_index:0,reader_layout:'scroll',scroll_position:position},{onConflict:'user_id,story_id'}),300);}}>
               <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')} · {readerChapter.status==='published'?'YAYINDA':'ÇALIŞMA NÜSHASI · YAYINLANMADI'}</span><h1>{readerChapter.title}</h1>
               <div className="reader-prose">{readerParagraphs.map((paragraph,index)=><p className="reader-attributed-text" key={(paragraph.id||'legacy')+'-'+index}>{renderAttributedReaderText(paragraph.content, readerAuthorAttribution, sentenceHighlights)}</p>)}</div>

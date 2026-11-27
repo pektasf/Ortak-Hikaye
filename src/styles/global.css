@@ -962,3 +962,12 @@ input,textarea,select{font-size:13px}
 @media(max-width:680px){.story-settings-grid{grid-template-columns:1fr}.story-settings-footer{align-items:stretch;flex-direction:column}.story-settings-footer .button{width:100%}}
 
 .chapter-word-limit-label{display:inline-flex;align-items:center;gap:5px;color:#8d7967;font-size:11px;padding:4px 8px;border:1px solid #e8ded1;border-radius:6px;background:#faf7f1}
+
+
+/* Author attribution appears on hover without taking space in the book text. */
+.reader-attributed-text{position:relative;margin:0 0 1.15em!important;}
+.reader-author-hover{position:relative;cursor:help;text-decoration:underline;text-decoration-color:rgba(150,112,78,.22);text-decoration-thickness:1px;text-underline-offset:3px;}
+.reader-author-hover:hover{text-decoration-color:rgba(150,112,78,.72);}
+.reader-attributed-text::after{content:attr(data-author) " yazdı";position:absolute;z-index:12;left:0;bottom:calc(100% - 3px);padding:6px 9px;border:1px solid #dfd1bf;border-radius:6px;background:#382820;color:#fff8ef;font:500 10px/1.3 'DM Sans',Arial,sans-serif;white-space:nowrap;box-shadow:0 5px 16px rgba(40,27,18,.18);opacity:0;visibility:hidden;transform:translateY(3px);pointer-events:none;transition:opacity .14s ease,transform .14s ease,visibility .14s ease;}
+.reader-attributed-text:hover::after,.reader-attributed-text:focus-within::after{opacity:1;visibility:visible;transform:translateY(0);}
+@media(hover:none){.reader-attributed-text::after{display:none;}}

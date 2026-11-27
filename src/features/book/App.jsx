@@ -637,8 +637,9 @@ export default function App() {
     const range = selection.getRangeAt(0);
     const elementFor = node => node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     const inReader = view === 'reader';
-    const canvas = document.querySelector(inReader ? '.reader-prose, .reader-page-prose' : '.writer-rich-canvas');
-    if (!canvas || !canvas.contains(range.commonAncestorContainer)) {
+    const canvas = Array.from(document.querySelectorAll(inReader ? '.reader-prose, .reader-page-prose' : '.writer-rich-canvas'))
+      .find(candidate => candidate.contains(range.commonAncestorContainer));
+    if (!canvas) {
       if (inReader) setReaderSelectedSentence(null);
       else setSelectedSentence(null);
       return;
@@ -1093,7 +1094,7 @@ export default function App() {
             </div>
             {isCompactReader && readerLayout === 'spread' && <small className="reader-responsive-note">Mobil ekranda rahat okuma için tek sayfa gösteriliyor.</small>}
           </div>
-          <div className={'reader-book reader-layout-' + effectiveReaderLayout}>
+          <div className={'reader-book reader-layout-' + effectiveReaderLayout} onMouseUp={captureSentenceSelection} onTouchEnd={captureSentenceSelection}>
             <div className="reader-running-head"><span>{book?.title || 'Ortak Roman'}</span><span>{activeStory?.title || ''}</span></div>
             <section className="reader-frontmatter">
               <span className="reader-front-kicker">ORTAK ROMAN · BİRLİKTE YAZILAN BİR KİTAP</span>

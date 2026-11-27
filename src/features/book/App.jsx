@@ -297,8 +297,7 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    if (!authorized || !session) return;
+  useEffect(() => {    if (!authorized || !session) return;
     refreshWorkspace();
     const channel = supabase.channel('ortak-roman-workspace-' + session.user.id)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' }, refreshWorkspace)
@@ -416,12 +415,19 @@ export default function App() {
       return;
     }
     setBusy(true);
-    const redirect = window.location.origin + window.location.pathname +
-      (storyInvite ? '?story_invite=' + encodeURIComponent(storyInvite) : '?setup=1');
-    const { error } = await supabase.auth.signInWithOtp({
-      email, options: { emailRedirectTo: redirect, shouldCreateUser: true }
-    });
-    setNotice(error?.message || 'Giriş bağlantısı e-posta adresine gönderildi. Bağlantıyı aynı cihazda aç.');
+    if (storyInvite) {
+      const { error } = await supabase.auth.signInAnonymously({
+        options: { data: { name: name.trim() || 'Yazar' } }
+      });
+      if (error) setNotice('Davetle katılım başlatılamadı: ' + error.message);
+      else setNotice('Davet doğrulanıyor, hikâyen hazırlanıyor…');
+    } else {
+      const redirect = window.location.origin + window.location.pathname + '?setup=1';
+      const { error } = await supabase.auth.signInWithOtp({
+        email, options: { emailRedirectTo: redirect, shouldCreateUser: true }
+      });
+      setNotice(error?.message || 'Yönetici giriş bağlantısı e-posta adresine gönderildi.');
+    }
     setBusy(false);
   }
 
@@ -597,8 +603,7 @@ export default function App() {
     });
     if (error) setNotice('Hikâye daveti oluşturulamadı: ' + error.message);
     else {
-      const url = window.location.origin + window.location.pathname + '?story_invite=' + encodeURIComponent(data);
-      setStoryInviteLinks(items => ({ ...items, [storyId]: url }));
+      const url = window.location.origin + window.location.pathname + '?story_invite=' + encodeURIComponent(data);      setStoryInviteLinks(items => ({ ...items, [storyId]: url }));
       await copyLink(url);
       setNotice('7 gün geçerli hikâye daveti oluşturuldu ve kopyalandı.');
     }
@@ -797,8 +802,7 @@ export default function App() {
     <header className="topbar">
       <a className="brand" href={window.location.pathname}>✦ ORTAK <b>ROMAN</b></a>
       {session ? <div className="account"><button className="text-button" onClick={()=>setView('home')}>Ana sayfa</button><button className="text-button" onClick={()=>setView('discover')}>Yazarları keşfet</button><button className="button light profile-nav-button" disabled={profileBusy} onClick={() => openProfile()}>{profileBusy ? 'Açılıyor…' : 'Profilim'}</button><button className="button light" onClick={() => supabase.auth.signOut()}>Çıkış</button></div> : <span className="eyebrow">DAVETLİ YAZARLAR</span>}
-    </header>
-    <main className={session ? 'content workspace-content' : 'content login-content'}>
+    </header>    <main className={session ? 'content workspace-content' : 'content login-content'}>
       {!session ? <div className="login-layout">
         <section className="login-hero">
           <div className="login-hero-copy">
@@ -816,13 +820,19 @@ export default function App() {
         <section className="panel login-panel">
           <div className="login-panel-mark">✦</div><span className="eyebrow">DAVETLİ YAZARLAR İÇİN</span>
           <h2>Hikâyeye katıl.</h2>
-          <p>Davet bağlantınla geldin. E-posta adresini bırak; sana güvenli bir giriş bağlantısı gönderelim.</p>
+          <p>{window.localStorage.getItem('ortak_roman_story_invite') ? 'Davet bağlantın doğrulandığında e-posta gerektirmeden hikâyeye katılabilirsin.' : 'Katılmak için sana gönderilen geçerli hikâye davet bağlantısını açmalısın.'}</p>
           <form onSubmit={signIn} className="login-form">
-            <label htmlFor="login-email">E-POSTA ADRESİN</label>
-            <input id="login-email" type="email" required placeholder="ornek@eposta.com" value={email} onChange={e => setEmail(e.target.value)} />
-            <button className="button" disabled={busy}>{busy ? 'Gönderiliyor…' : 'Giriş bağlantısı gönder'} <span>→</span></button>
+            {window.localStorage.getItem('ortak_roman_story_invite') ? <>
+              <label htmlFor="login-name">YAZAR ADIN (İSTEĞE BAĞLI)</label>
+              <input id="login-name" type="text" maxLength={24} placeholder="Nasıl görünmek istersin?" value={name} onChange={e => setName(e.target.value)} />
+              <button className="button" disabled={busy}>{busy ? 'Katılınıyor…' : 'Davetle hikâyeye katıl'} <span>→</span></button>
+            </> : window.localStorage.getItem('ortak_roman_bootstrap') === '1' ? <>
+              <label htmlFor="login-email">YÖNETİCİ E-POSTA ADRESİ</label>
+              <input id="login-email" type="email" required placeholder="ornek@eposta.com" value={email} onChange={e => setEmail(e.target.value)} />
+              <button className="button" disabled={busy}>{busy ? 'Gönderiliyor…' : 'Yönetici giriş bağlantısı gönder'} <span>→</span></button>
+            </> : <button className="button" type="button" disabled>Önce davet bağlantısını aç</button>}
           </form>
-          <div className="login-footnote"><span>◈</span> Yalnızca geçerli hikâye daveti olan kişiler katılabilir.</div>
+          <div className="login-footnote"><span>◈</span> Davet bağlantısına sahip olan herkes katılabilir; e-posta onayı gerekmez.</div>
         </section>
       </div> : <>
         {view === 'profile' ? <section className="profile-page">

@@ -636,3 +636,13 @@ html.dark .story-nav-item.active { background: #30252a; }
   .focus-mode .editor-save-help{margin:0;padding:7px 10px;font-size:10px;line-height:1.4}
   .focus-mode .editor-footer{padding:7px 0!important}
 }
+
+
+.writer-paragraph-tools{display:flex;align-items:center;flex-wrap:wrap;gap:7px;max-width:760px;margin:0 auto 12px;padding:9px 11px;border:1px solid var(--editorial-line);border-radius:7px;background:var(--editorial-card);color:var(--editorial-muted);font:10px 'Plus Jakarta Sans',sans-serif}
+.writer-paragraph-tools>span{margin-right:5px;color:var(--editorial-ink);font-weight:700}
+.writer-paragraph-tools button{min-height:29px;padding:5px 9px;border:1px solid var(--editorial-line);border-radius:5px;background:var(--editorial-paper);color:var(--editorial-ink);cursor:pointer;font-size:10px}
+.writer-paragraph-tools button:hover:not(:disabled){border-color:var(--editorial-terracotta);color:var(--editorial-terracotta)}
+.writer-paragraph-tools button:disabled{opacity:.38;cursor:not-allowed}
+.writer-paragraph-tools .writer-paragraph-delete{margin-left:auto;color:#a34d3b}
+.writer-paragraph-tools small{flex-basis:100%;font-size:9px}
+@media(max-width:680px){.writer-paragraph-tools{gap:5px;padding:8px}.writer-paragraph-tools>span{flex-basis:100%}.writer-paragraph-tools button{flex:1}.writer-paragraph-tools small{line-height:1.4}}

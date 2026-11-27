@@ -299,7 +299,7 @@ export default function App() {
         </section>
         <div className="progress"><i style={{ width: Math.min(100, total / target * 100) + '%' }} /></div>
       </>}
-      {session ? <>
+      {session && <>
         {role === 'owner' && <section className="panel invite-panel">
           <span className="eyebrow">YÖNETİCİ · DAVETLER</span><h2>Yeni yazar davet et</h2>
           <p>Bağlantı 7 gün geçerlidir ve süresi dolana kadar sınırsız sayıda yeni hesap tarafından kullanılabilir.</p>

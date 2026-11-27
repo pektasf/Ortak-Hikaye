@@ -59,15 +59,15 @@ Hikâye ayarları kaydetme akışı `theme` alanını güncelliyor; ancak çalı
 - [x] Yeni geliştirmeler için ayrı Git dalı açma.
 - [x] Hikâye konu/tema alanının yenileme sorgusuna eklenmesi.
 - [x] Uzun konu/tema önizlemesinin sınırlanması ve kendi içinde kaydırılması.
-- [ ] Üretim derlemesi ve mevcut ana akışların doğrulanması.
+- [ ] Üretim derlemesi ve mevcut ana akışların doğrulanması (bu çalışma ortamında GitHub erişimi/DNS olmadığı için henüz çalıştırılamadı).
 
 ### Aşama 1 — Tasarım sistemi ve ana navigasyon
-- [ ] Renk, tipografi, ölçü, boşluk, radius, gölge ve odak tokenları.
-- [ ] Ortak buton, input, textarea, kart, modal, bildirim ve boş durum bileşenleri.
-- [ ] Masaüstü ve mobil navigasyon.
-- [ ] Ana sayfa ve kitaplık.
+- [x] İlk renk, tipografi, ölçü, boşluk, radius, gölge ve odak tokenları tanımlandı.
+- [ ] Ortak buton, input, textarea, kart, modal, bildirim ve boş durum bileşenlerinin tamamlanması.
+- [x] Mevcut üst navigasyonun masaüstü/mobil görsel düzeni iyileştirildi; alt navigasyon ve ekran bazlı testler bekliyor.
+- [x] Ana sayfa/kitaplık için mevcut tasarımın kart, boşluk, yüzey ve mobil kırılım iyileştirmeleri yapıldı; görsel doğrulama bekliyor.
 - [ ] Çalışma alanı ve hikâye ayarları.
-- [ ] Tablet/mobil uyum ve erişilebilirlik.
+- [ ] Tablet/mobil uyum ve erişilebilirlik uçtan uca doğrulaması.
 
 ### Aşama 2 — Kitap okuyucu
 - [ ] Kapak ve künye sayfaları.

@@ -44,6 +44,17 @@ export default function App() {
   const activeChapter = chapters.find(item => item.id === activeChapterId) || null;
   const isStoryOwner = Boolean(activeStory && activeStory.owner_id === userId);
 
+  async function loadChapterBlocks(chapterId) {
+    const { data, error } = await supabase.from('chapter_blocks')
+      .select('id,content,author_id,updated_by,position').eq('chapter_id', chapterId).order('position');
+    if (error) { setNotice('Paragraflar yüklenemedi: ' + error.message); return; }
+    const { data: authors } = await supabase.rpc('get_story_author_names', { p_chapter_id: chapterId });
+    const names = Object.fromEntries((authors || []).map(item => [item.user_id, item.display_name]));
+    const blocks = (data || []).map(block => ({...block,author_name:names[block.author_id] || (block.author_id ? 'Yazar' : 'Eski metin')}));
+    setEditorBlocks(blocks);
+    setEditorContent(blocks.map(block => block.content).join('\n\n') || '');
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const storyInvite = params.get('story_invite');
@@ -168,11 +179,9 @@ export default function App() {
     let cancelled = false;
     setEditorTitle(activeChapter.title);
     setEditorStatus(activeChapter.status || 'draft');
-    supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', activeChapter.id).order('position').then(({data,error}) => {
+    loadChapterBlocks(activeChapter.id).then(() => {
       if (cancelled) return;
-      if (error) { setNotice('Paragraflar yüklenemedi: ' + error.message); return; }
-      setEditorBlocks(data || []);
-      setEditorContent((data || []).map(block => block.content).join('\n\n') || activeChapter.content || '');
+      if (!editorBlocks.length && activeChapter.content) setEditorContent(activeChapter.content);
     });
     return () => { cancelled = true; };
   }, [activeChapterId, activeChapter?.updated_at, editorDirty]);
@@ -326,9 +335,7 @@ export default function App() {
     if (error) setNotice('Bölüm kaydedilemedi: ' + error.message);
     else {
       setChapters(items => items.map(item => item.id === data.id ? data : item));
-      const { data: savedBlocks } = await supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', activeChapter.id).order('position');
-      setEditorBlocks(savedBlocks || []);
-      setEditorContent((savedBlocks || []).map(block => block.content).join('\n\n'));
+      await loadChapterBlocks(activeChapter.id);
       setEditorDirty(false);
       setNotice('Bölüm kaydedildi. Paragraf katkıları yazarlarla eşleştirildi.');
     }
@@ -340,10 +347,8 @@ export default function App() {
     setFocusMode(false);
     setActiveChapterId(chapter.id);
     setEditorTitle(chapter.title);
-    const { data: blocks, error: blocksError } = await supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', chapter.id).order('position');
-    if (blocksError) { setNotice('Paragraf katkıları yüklenemedi: ' + blocksError.message); return; }
-    setEditorBlocks(blocks || []);
-    setEditorContent((blocks || []).map(block => block.content).join('\n\n') || chapter.content || '');
+    await loadChapterBlocks(chapter.id);
+    if (!editorBlocks.length) setEditorContent(chapter.content || '');
     setEditorStatus(chapter.status || 'draft');
     setEditorDirty(false);
     setShowRevisions(false);
@@ -389,8 +394,7 @@ export default function App() {
       setChapters(items => items.map(item => item.id === data.id ? data : item));
       setEditorTitle(data.title);
       setEditorContent(data.content);
-      const { data: restored } = await supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', activeChapter.id).order('position');
-      setEditorBlocks(restored || []);
+      await loadChapterBlocks(activeChapter.id);
       setEditorStatus(data.status);
       setEditorDirty(false);
       setNotice('Önceki sürüm geri yüklendi.');
@@ -553,7 +557,7 @@ export default function App() {
                           const next = editorBlocks.map((item, i) => i === index ? {...item,content:e.target.value} : item);
                           setEditorBlocks(next); setEditorContent(next.map(item => item.content).join('\n\n')); setEditorDirty(true);
                         }} placeholder="Paragrafını buraya yaz…" aria-label={'Paragraf ' + (index + 1)}/>
-                        <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id === userId ? 'Senin paragrafın' : 'Katkı yapan yazar') : 'Eski metin · Yazarı henüz belirlenmemiş'} · {words(block.content)} kelime</span>
+                        <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id === userId ? 'Sen yazdın' : block.author_name) : 'Eski metin · Yazarı henüz belirlenmemiş'} · {words(block.content)} kelime</span>
                           <button type="button" className="text-button danger" onClick={() => {const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item => item.content).join('\n\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
                         </div>
                       </div>)}

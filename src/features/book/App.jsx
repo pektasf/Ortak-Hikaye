@@ -1030,6 +1030,7 @@ export default function App() {
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
                         style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'Literata', 'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
                         onInput={e=>{const nodes=readWriterCanvasBlocks(e.currentTarget,userId);setEditorContent(nodes.map(block=>block.content).join('\n\n'));setEditorDirty(true);}}
+                        onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();e.currentTarget.closest('form')?.requestSubmit();}}}
                         onMouseUp={captureSentenceSelection}
                         onKeyUp={captureSentenceSelection}
                       >

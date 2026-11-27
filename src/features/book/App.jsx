@@ -174,7 +174,7 @@ export default function App() {
   }, [activeChapterId, activeStoryId, authorized, userId, chapters]);
 
   useEffect(() => {
-    if (!authorized || !activeChapterId || !userId) { setWritingLock(null); return; }
+    if (!authorized || view !== 'workspace' || !activeChapterId || !userId) { setWritingLock(null); return; }
     let alive = true;
     let timer;
     let ownsLock = false;
@@ -203,7 +203,7 @@ export default function App() {
       supabase.removeChannel(channel);
       if (ownsLock) supabase.rpc('release_chapter_writing_lock', { p_chapter_id: activeChapterId });
     };
-  }, [authorized, activeChapterId, userId]);
+  }, [authorized, activeChapterId, userId, view]);
 
   useEffect(() => {
     if (view === 'discover') loadDiscover('');
@@ -500,6 +500,9 @@ export default function App() {
 
   const totalWords = chapters.reduce((sum, item) => sum + words(item.content || ''), 0);
   const publishedChapters = chapters.filter(item => item.status === 'published').length;
+  const storyWordCount = chapters.reduce((sum,item) => sum + words(item.id === activeChapterId ? editorContent : (item.content || '')),0);
+  const chapterWordLimit = activeChapter?.target_words || 1000;
+  const chapterOverLimit = Boolean(activeChapter && words(editorContent) > chapterWordLimit);
 
   return <div className="app-shell">
     <header className="topbar">
@@ -605,7 +608,7 @@ export default function App() {
                 <div className="story-heading-actions"><span className="story-word-meter">{chapters.reduce((n,c)=>n+words(c.content||''),0).toLocaleString('tr-TR')} / {(activeStory.target_words||10000).toLocaleString('tr-TR')} kelime</span><button className="button light" onClick={()=>{setReadingIndex(0);setView('reader');}}>Kitabı oku</button><span className={'status-pill ' + activeStory.status}>{activeStory.status === 'published' ? 'Yayında' : activeStory.status === 'archived' ? 'Arşiv' : 'Taslak'}</span><button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(activeStory.id)}>Davet bağlantısı</button>{isStoryOwner && <button className="button light danger-button" disabled={storyBusy} onClick={deleteStory}>Hikâyeyi sil</button>}</div>
               </div>
 
-              <div className="story-target-control"><label>Hikâye kelime hedefi <input type="number" min="100" max="1000000" step="100" value={activeStory.target_words || 10000} onChange={async e=>{const target_words=Number(e.target.value);setStories(items=>items.map(s=>s.id===activeStory.id?{...s,target_words}:s));}} onBlur={async e=>{const {error}=await supabase.from('stories').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeStory.id);if(error)setNotice('Hedef güncellenemedi: '+error.message);else setNotice('Hikâye kelime hedefi güncellendi.');}}/></label><span>Bu hikâyenin tüm bölümlerinin toplamı için geçerli</span></div>
+              {isStoryOwner && <div className="story-target-control"><label>Hikâye kelime hedefi <input type="number" min="100" max="1000000" step="100" value={activeStory.target_words || 10000} onChange={e=>{const target_words=Number(e.target.value);setStories(items=>items.map(s=>s.id===activeStory.id?{...s,target_words}:s));}} onBlur={async e=>{const {error}=await supabase.from('stories').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeStory.id);if(error)setNotice('Hedef güncellenemedi: '+error.message);else setNotice('Hikâye kelime hedefi güncellendi.');}}/></label><span>{storyWordCount.toLocaleString('tr-TR')} / {(activeStory.target_words||10000).toLocaleString('tr-TR')} kelime · Hikâyedeki tüm bölümlerin toplamı</span></div>}
               <div className="chapter-layout">
                 <aside className="chapter-sidebar">
                   <div className="chapter-sidebar-title"><h3>Bölümler</h3><span>{chapters.length}</span></div>
@@ -625,6 +628,7 @@ export default function App() {
                     {focusMode && <div className="focus-width-controls"><span>YAZMA ALANI</span><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Geniş · Word</button><span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime</span></div>}
                     <input className="chapter-title-input" required maxLength={120} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı"/>
                     <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} / {(activeChapter.target_words||1000).toLocaleString('tr-TR')} kelime</span><label>Durum <select value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label><label>Bölüm hedefi <input className="inline-word-target" type="number" min="100" max="100000" step="100" value={activeChapter.target_words || 1000} onChange={async e=>{const target_words=Number(e.target.value);setChapters(items=>items.map(c=>c.id===activeChapter.id?{...c,target_words}:c));}} onBlur={async e=>{const {error}=await supabase.from('chapters').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeChapter.id);if(error)setNotice('Bölüm hedefi güncellenemedi: '+error.message);else setNotice('Bölüm kelime hedefi güncellendi.');}}/></label></div>
+                    {chapterOverLimit && <div className="word-limit-warning">Bölüm kelime sınırını aştın. Kaydedebilmek için {Math.max(0,words(editorContent)-chapterWordLimit)} kelime azalt veya bölüm hedefini yükselt.</div>}
                     {writingLock && <div className={'writing-presence ' + (writingLock.acquired ? 'is-self' : 'is-other')}><span className="writing-pencil">✎</span>{writingLock.acquired ? 'Şu anda bu bölümü sen yazıyorsun. Sıra sende.' : (writingLock.display_name || 'Bir yazar') + ' şu anda yazıyor · Bu bölüm geçici olarak kilitli.'}</div>}
                     <div className="chapter-blocks-editor" aria-label="Paragraf yazma alanı">
                       {editorBlocks.map((block, index) => <div className="chapter-block" key={block.id || 'new-' + index}>
@@ -638,7 +642,7 @@ export default function App() {
                       </div>)}
                       <button type="button" className="add-paragraph-button" disabled={!writingLock?.acquired} onClick={() => {setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yeni paragraf ekle</button>
                     </div>
-                    <div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Değişiklikleri kaydet'}</button></div>
+                    <div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || chapterOverLimit || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Değişiklikleri kaydet'}</button></div>
                     {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>
                       {revisions.length ? revisions.map(revision => <article key={revision.id}><div><strong>{revision.title}</strong><small>{new Date(revision.created_at).toLocaleString('tr-TR')} · {words(revision.content)} kelime</small></div><button type="button" className="button light" onClick={() => restoreRevision(revision)}>Geri yükle</button></article>) : <p>Henüz önceki bir sürüm yok.</p>}
                     </div>}

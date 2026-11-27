@@ -615,7 +615,7 @@ html.writing-studio-active body{margin:0!important}
   outline:none!important;
   background:transparent!important;
   color:var(--studio-ink)!important;
-  font-family:var(--studio-book-font)!important;
+  font-family:var(--studio-book-font);
   font-size:20px;
   line-height:1.9;
   letter-spacing:.002em;

@@ -418,3 +418,11 @@ input,textarea,select{border-color:#dfd4c7;background:#fffefa;border-radius:7px;
 .focus-mode .chapter-editor{min-width:0!important;overflow:hidden!important}
 .focus-mode .chapter-blocks-editor{min-width:0!important;max-width:100%!important}
 .focus-mode .chapter-block-input{max-width:100%!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important;word-wrap:break-word!important}
+
+/* One continuous editable manuscript surface */
+.writer-rich-canvas{display:block;width:100%;max-width:100%;min-width:0;min-height:100%;outline:none;border:0;background:transparent;color:#40342c;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;caret-color:#765347}
+.writer-rich-canvas:focus{outline:none}
+.writer-rich-canvas:empty::before{content:attr(data-placeholder);color:#c2b5a7;font-style:italic;pointer-events:none}
+.writer-rich-canvas>p,.writer-rich-canvas>div{display:block;width:100%;max-width:100%;min-width:0;min-height:1.65em;margin:0 0 .85em;padding:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal}
+.writer-rich-canvas>p:has(>br:only-child)::before,.writer-rich-canvas>div:has(>br:only-child)::before{content:' ';display:inline-block;min-height:1em}
+.writer-rich-canvas[contenteditable="false"]{opacity:.76;cursor:not-allowed}

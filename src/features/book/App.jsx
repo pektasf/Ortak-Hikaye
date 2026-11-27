@@ -172,7 +172,7 @@ export default function App() {
       if (cancelled) return;
       if (error) { setNotice('Paragraflar yüklenemedi: ' + error.message); return; }
       setEditorBlocks(data || []);
-      setEditorContent((data || []).map(block => block.content).join('\\n\\n') || activeChapter.content || '');
+      setEditorContent((data || []).map(block => block.content).join('\n\n') || activeChapter.content || '');
     });
     return () => { cancelled = true; };
   }, [activeChapterId, activeChapter?.updated_at, editorDirty]);
@@ -328,7 +328,7 @@ export default function App() {
       setChapters(items => items.map(item => item.id === data.id ? data : item));
       const { data: savedBlocks } = await supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', activeChapter.id).order('position');
       setEditorBlocks(savedBlocks || []);
-      setEditorContent((savedBlocks || []).map(block => block.content).join('\\n\\n'));
+      setEditorContent((savedBlocks || []).map(block => block.content).join('\n\n'));
       setEditorDirty(false);
       setNotice('Bölüm kaydedildi. Paragraf katkıları yazarlarla eşleştirildi.');
     }
@@ -343,7 +343,7 @@ export default function App() {
     const { data: blocks, error: blocksError } = await supabase.from('chapter_blocks').select('id,content,author_id,updated_by,position').eq('chapter_id', chapter.id).order('position');
     if (blocksError) { setNotice('Paragraf katkıları yüklenemedi: ' + blocksError.message); return; }
     setEditorBlocks(blocks || []);
-    setEditorContent((blocks || []).map(block => block.content).join('\\n\\n') || chapter.content || '');
+    setEditorContent((blocks || []).map(block => block.content).join('\n\n') || chapter.content || '');
     setEditorStatus(chapter.status || 'draft');
     setEditorDirty(false);
     setShowRevisions(false);
@@ -378,7 +378,7 @@ export default function App() {
   async function restoreRevision(revision) {
     if (!activeChapter || !window.confirm('Bu eski sürümü bölümün güncel içeriği olarak geri yüklemek istiyor musun?')) return;
     setBusy(true);
-    const restoredBlocks = revision.content.split(/\\n\\s*\\n/).filter(text => text.trim()).map(content => ({id:null,content}));
+    const restoredBlocks = revision.content.split(/\n\s*\n/).filter(text => text.trim()).map(content => ({id:null,content}));
     const { error } = await supabase.rpc('save_chapter_blocks', {
       p_chapter_id: activeChapter.id, p_title: revision.title, p_status: activeChapter.status,
       p_blocks: restoredBlocks
@@ -551,10 +551,10 @@ export default function App() {
                       {editorBlocks.map((block, index) => <div className="chapter-block" key={block.id || 'new-' + index}>
                         <textarea className="chapter-content-input chapter-block-input" value={block.content} onChange={e => {
                           const next = editorBlocks.map((item, i) => i === index ? {...item,content:e.target.value} : item);
-                          setEditorBlocks(next); setEditorContent(next.map(item => item.content).join('\\n\\n')); setEditorDirty(true);
+                          setEditorBlocks(next); setEditorContent(next.map(item => item.content).join('\n\n')); setEditorDirty(true);
                         }} placeholder="Paragrafını buraya yaz…" aria-label={'Paragraf ' + (index + 1)}/>
                         <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id === userId ? 'Senin paragrafın' : 'Katkı yapan yazar') : 'Eski metin · Yazarı henüz belirlenmemiş'} · {words(block.content)} kelime</span>
-                          <button type="button" className="text-button danger" onClick={() => {const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item => item.content).join('\\n\\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
+                          <button type="button" className="text-button danger" onClick={() => {const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item => item.content).join('\n\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
                         </div>
                       </div>)}
                       <button type="button" className="add-paragraph-button" onClick={() => {setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yeni paragraf ekle</button>

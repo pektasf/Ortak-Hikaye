@@ -69,3 +69,11 @@ GitHub Actions → GitHub Pages
 - `supabase/schema.sql` yeni Supabase projesi için tam bootstrap dosyasıdır.
 - Mevcut projede bootstrap dosyası tekrar çalıştırılmaz; yalnızca eksik migration uygulanır.
 - Migration'lar veri silmeden ve geriye dönük uyumu gözeterek hazırlanır.
+
+
+## Yazar profilleri ve yönetim
+- `profiles` tablosunda görünen ad, biyografi ve avatar URL'si tutulur.
+- `get_author_profile` yalnızca kişinin kendisi veya aynı hikâyeyi paylaştığı üyeler tarafından çağrılabilir; kişisel istatistikleri kontrollü RPC üzerinden döndürür.
+- Hikâye silme yalnızca hikâye sahibine açık `delete_story` RPC'siyle yapılır. İlişkili bölümler, sürümler, davetler ve okuma ilerlemeleri yabancı anahtar `ON DELETE CASCADE` kurallarıyla temizlenir.
+- Odak modu yazma alanını ekranın tamamına taşır; defter ve geniş Word benzeri yazma genişliği sunar.
+- Profildeki kelime metriği, kullanıcının ilk oluşturduğu bölümlerin güncel metnini sayar; ortak metin içindeki bireysel katkı değildir. Kesin katkı ölçümü için paragraf/metin bloğu yazarlığı gerekir.

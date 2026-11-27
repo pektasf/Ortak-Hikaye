@@ -827,9 +827,18 @@ export default function App() {
     }, 520);
   }
 
-  function exitWritingStudio() {
+  async function exitWritingStudio() {
     if (editorDirty && !window.confirm('Kaydedilmemiş değişikliklerin var. Yazma alanından çıkmak istiyor musun?')) return;
+    // Release the chapter immediately before leaving so the next writer does not
+    // have to wait for the lease timeout.
+    if (writingLock?.acquired && activeChapterId) {
+      const { error } = await supabase.rpc('release_chapter_writing_lock', { p_chapter_id: activeChapterId });
+      if (error) {
+        setNotice('Yazma kilidi bırakılamadı. Diğer yazarın erişimi kısa süre sonra otomatik açılacak: ' + error.message);
+      }
+    }
     setFocusMode(false);
+    setWritingLock(null);
   }
 
   return <div className="app-shell">

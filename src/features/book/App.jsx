@@ -769,8 +769,7 @@ export default function App() {
   const storyWordCount = chapters.reduce((sum,item) => sum + words(item.id === activeChapterId ? editorContent : (item.content || '')),0);
   const chapterWordLimit = activeChapter?.target_words || 1000;
   const chapterOverLimit = Boolean(activeChapter && words(editorContent) > chapterWordLimit);
-  useEffect(()=>{if(readerPageRestoreRef.current===null||!readerPages.length)return;setReaderPageIndex(Math.min(readerPageRestoreRef.current,readerMaxPageIndex));readerPageRestoreRef.current=null;},[readerPages.length,readerMaxPageIndex]);
-  useEffect(()=>{if(view!=='reader'||effectiveReaderLayout!=='scroll'||!readerScrollRestore)return;const sheet=document.querySelector('.reader-scroll-sheet');if(sheet){sheet.scrollTop=readerScrollRestore;setReaderScrollRestore(0);}},[view,effectiveReaderLayout,readerChapter?.id,readerScrollRestore]);
+
 
   function turnBookPage(direction) {
     if (readerTurn || readerTurnTimerRef.current !== null || effectiveReaderLayout === 'scroll' || !readerPages.length) return;

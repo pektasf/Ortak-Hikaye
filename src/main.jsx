@@ -6,11 +6,11 @@ import './styles/tokens.css';
 class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { failed: false };
+    this.state = { failed: false, error: null };
   }
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+  static getDerivedStateFromError(error) {
+    return { failed: true, error };
   }
 
   componentDidCatch(error, info) {
@@ -25,6 +25,7 @@ class AppErrorBoundary extends React.Component {
             <div style={{fontSize:'11px',letterSpacing:'.16em',color:'#a47a59'}}>ORTAK ROMAN</div>
             <h1 style={{fontFamily:"'EB Garamond',Georgia,serif",fontSize:'34px',fontWeight:500}}>Sayfa açılırken bir sorun oluştu.</h1>
             <p style={{lineHeight:1.7,color:'#87796d'}}>Uygulama beklenmeyen bir hata ile karşılaştı. Sayfayı yenileyerek yeniden deneyebilirsin.</p>
+            <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',padding:'12px',borderRadius:'8px',background:'#f5eee6',color:'#8b5047',fontSize:'12px'}}>{this.state.error?.message || 'Hata ayrıntısı alınamadı.'}</pre>
             <button onClick={()=>window.location.reload()} style={{border:0,borderRadius:'999px',padding:'12px 18px',background:'#563a3b',color:'#fff',cursor:'pointer'}}>Sayfayı yenile</button>
           </section>
         </main>

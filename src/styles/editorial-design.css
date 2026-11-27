@@ -482,7 +482,7 @@ html.dark .story-nav-item.active { background: #30252a; }
   font: inherit;
   text-indent: 1.2em;
 }
-.reader-page-prose p:first-child:first-letter, .reader-prose p:first-child:first-letter {
+.reader-page-prose > .reader-paragraph-group:first-child > .reader-attributed-text:first-letter, .reader-prose > .reader-paragraph-group:first-child > .reader-attributed-text:first-letter {
   float: left; padding: .09em .12em 0 0;
   color: var(--editorial-terracotta);
   font: 700 3.5em/.78 'Cormorant Garamond',serif;

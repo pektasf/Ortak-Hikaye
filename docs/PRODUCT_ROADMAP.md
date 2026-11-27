@@ -114,3 +114,17 @@ Bu belge ürün kararlarının ve uygulama sırasının tek referansıdır. Tama
 - [ ] Profil fotoğrafı yükleme, bildirimler ve takip akışı
 - [ ] Gerçek iki hesapla eşzamanlı yazım ve kilit devri testi
 - [ ] Mobil erişilebilirlik, hareket azaltma tercihi ve uçtan uca görsel test
+
+
+## Aşama 8 — Word benzeri yazma ve kitap sayfalama
+- [x] Bölüm açıldığında tam ekran, dikkat dağıtmayan yazma stüdyosuna geçiş
+- [x] Tek belge yüzeyi üzerinde akışkan paragraf alanı
+- [x] Defter ve geniş Word sayfası ölçüleri
+- [x] Yazı tipi, punto ve satır aralığı tercihleri
+- [x] Ctrl/Cmd + S ile kaydetme
+- [x] Odak alanında yatay taşmayı engelleyen esnek genişlik ve metin kırma kuralları
+- [x] Tek sayfa, açık kitap ve kaydırmalı okuma düzeni
+- [x] Açık kitap görünümünde CSS 3D sayfa çevirme animasyonu
+- [ ] Uzun kitaplar için ölçüme dayalı gerçek içerik taşması ve otomatik sayfa kırılımı
+- [ ] Word (.docx) içe/dışa aktarma
+- [ ] Gerçek zamanlı ortak imleçler ve yazım çakışması testi

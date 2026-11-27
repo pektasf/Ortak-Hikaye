@@ -4,6 +4,34 @@ import { words } from '../../lib/text.js';
 import SetupScreen from '../../components/setup/SetupScreen.jsx';
 import '../../styles/global.css';
 
+function paginateBookText(value, wordsPerPage = 175) {
+  const paragraphs = String(value || '').split(/\n\s*\n/).map(item => item.trim()).filter(Boolean);
+  const pages = [];
+  let page = [];
+  let pageWordCount = 0;
+  const flush = () => {
+    if (page.length) pages.push(page.join('\n\n'));
+    page = [];
+    pageWordCount = 0;
+  };
+  for (const paragraph of paragraphs) {
+    const tokens = paragraph.split(/\s+/);
+    let part = [];
+    for (const token of tokens) {
+      if (pageWordCount >= wordsPerPage) {
+        if (part.length) { page.push(part.join(' ')); part = []; }
+        flush();
+      }
+      part.push(token);
+      pageWordCount += 1;
+    }
+    if (part.length) page.push(part.join(' '));
+    if (pageWordCount >= wordsPerPage) flush();
+  }
+  flush();
+  return pages;
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [authorized, setAuthorized] = useState(false);
@@ -44,6 +72,12 @@ export default function App() {
   const [writingLock, setWritingLock] = useState(null);
   const [lockNotice, setLockNotice] = useState('');
   const [view, setView] = useState('home');
+  const [writingFont, setWritingFont] = useState('serif');
+  const [writingSize, setWritingSize] = useState('20');
+  const [writingLineHeight, setWritingLineHeight] = useState('1.9');
+  const [readerLayout, setReaderLayout] = useState('spread');
+  const [readerPageIndex, setReaderPageIndex] = useState(0);
+  const [readerTurn, setReaderTurn] = useState(null);
 
   const userId = session?.user?.id;
   const activeStory = stories.find(item => item.id === activeStoryId) || null;
@@ -59,6 +93,7 @@ export default function App() {
     const blocks = (data || []).map(block => ({...block,author_name:names[block.author_id] || (block.author_id ? 'Yazar' : 'Eski metin'),editor_name:names[block.updated_by] || 'Yazar'}));
     setEditorBlocks(blocks);
     setEditorContent(blocks.map(block => block.content).join('\n\n') || '');
+    return blocks;
   }
 
   useEffect(() => {
@@ -174,7 +209,7 @@ export default function App() {
   }, [activeChapterId, activeStoryId, authorized, userId, chapters]);
 
   useEffect(() => {
-    if (!authorized || view !== 'workspace' || !activeChapterId || !userId) { setWritingLock(null); return; }
+    if (!authorized || !focusMode || !activeChapterId || !userId) { setWritingLock(null); return; }
     let alive = true;
     let timer;
     let ownsLock = false;
@@ -203,7 +238,7 @@ export default function App() {
       supabase.removeChannel(channel);
       if (ownsLock) supabase.rpc('release_chapter_writing_lock', { p_chapter_id: activeChapterId });
     };
-  }, [authorized, activeChapterId, userId, view]);
+  }, [authorized, activeChapterId, userId, focusMode]);
 
   useEffect(() => {
     if (view === 'discover') loadDiscover('');
@@ -211,7 +246,13 @@ export default function App() {
 
   useEffect(() => {
     if (!focusMode) return;
-    const onKeyDown = event => { if (event.key === 'Escape') setFocusMode(false); };
+    const onKeyDown = event => {
+      if (event.key === 'Escape') exitWritingStudio();
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        document.querySelector('.chapter-editor')?.requestSubmit();
+      }
+    };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [focusMode]);
@@ -221,9 +262,13 @@ export default function App() {
     let cancelled = false;
     setEditorTitle(activeChapter.title);
     setEditorStatus(activeChapter.status || 'draft');
-    loadChapterBlocks(activeChapter.id).then(() => {
+    loadChapterBlocks(activeChapter.id).then(loaded => {
       if (cancelled) return;
-      if (!editorBlocks.length && activeChapter.content) setEditorContent(activeChapter.content);
+      if (!loaded.length && activeChapter.content) {
+        const legacyBlocks = activeChapter.content.split(/\n\s*\n/).filter(Boolean).map(content => ({id:null,content,author_id:null,updated_by:null}));
+        setEditorBlocks(legacyBlocks);
+        setEditorContent(activeChapter.content);
+      }
     });
     return () => { cancelled = true; };
   }, [activeChapterId, activeChapter?.updated_at, editorDirty]);
@@ -378,8 +423,14 @@ export default function App() {
       setChapters(items => [...items, data]);
       setActiveChapterId(data.id);
       setNewChapterTitle('');
+      setEditorTitle(data.title);
+      setEditorBlocks([]);
+      setEditorContent('');
+      setEditorStatus('draft');
       setEditorDirty(false);
-      setNotice('Yeni bölüm oluşturuldu.');
+      setShowRevisions(false);
+      setFocusMode(true);
+      setNotice('Yeni bölüm açıldı. Yazmaya başlayabilirsin.');
     }
     setStoryBusy(false);
   }
@@ -405,14 +456,18 @@ export default function App() {
 
   async function openChapter(chapter) {
     if (editorDirty && !window.confirm('Kaydedilmemiş değişikliklerin var. Bölüm değiştirmek istiyor musun?')) return;
-    setFocusMode(false);
     setActiveChapterId(chapter.id);
     setEditorTitle(chapter.title);
-    await loadChapterBlocks(chapter.id);
-    if (!editorBlocks.length) setEditorContent(chapter.content || '');
+    const loaded = await loadChapterBlocks(chapter.id);
+    if (!loaded.length && chapter.content) {
+      const legacyBlocks = chapter.content.split(/\n\s*\n/).filter(Boolean).map(content => ({id:null,content,author_id:null,updated_by:null}));
+      setEditorBlocks(legacyBlocks);
+      setEditorContent(chapter.content);
+    }
     setEditorStatus(chapter.status || 'draft');
     setEditorDirty(false);
     setShowRevisions(false);
+    setFocusMode(true);
 
   }
 
@@ -503,6 +558,29 @@ export default function App() {
   const storyWordCount = chapters.reduce((sum,item) => sum + words(item.id === activeChapterId ? editorContent : (item.content || '')),0);
   const chapterWordLimit = activeChapter?.target_words || 1000;
   const chapterOverLimit = Boolean(activeChapter && words(editorContent) > chapterWordLimit);
+  const readerChapters = chapters.filter(item => item.status === 'published');
+  const readerChapter = readerChapters[readingIndex] || readerChapters[0] || null;
+  const readerPages = paginateBookText(readerChapter?.content || '');
+  const readerPageStep = readerLayout === 'spread' ? 2 : 1;
+  const readerMaxPageIndex = readerLayout === 'spread'
+    ? Math.max(0, Math.ceil(readerPages.length / 2) * 2 - 2)
+    : Math.max(0, readerPages.length - 1);
+
+  function turnBookPage(direction) {
+    if (readerTurn || readerLayout === 'scroll' || !readerPages.length) return;
+    const nextIndex = readerPageIndex + direction * readerPageStep;
+    if (nextIndex < 0 || nextIndex > readerMaxPageIndex) return;
+    setReaderTurn(direction > 0 ? 'forward' : 'backward');
+    window.setTimeout(() => {
+      setReaderPageIndex(nextIndex);
+      setReaderTurn(null);
+    }, 520);
+  }
+
+  function exitWritingStudio() {
+    if (editorDirty && !window.confirm('Kaydedilmemiş değişikliklerin var. Yazma alanından çıkmak istiyor musun?')) return;
+    setFocusMode(false);
+  }
 
   return <div className="app-shell">
     <header className="topbar">
@@ -563,8 +641,35 @@ export default function App() {
           <div className="discover-grid">{discoverAuthors.map(author => <article className="author-card" key={author.id}><button className="author-card-main" onClick={() => openProfile(author.id)}><span className="profile-avatar">{(author.display_name || 'Y').slice(0,1).toLocaleUpperCase('tr-TR')}</span><strong>{author.display_name}</strong><p>{author.bio || 'Henüz kendini tanıtmadı.'}</p><small>{author.followers_count} takipçi · {author.following_count} takip</small></button><div className="author-card-actions"><button className="button light" onClick={() => openProfile(author.id)}>Profili gör</button><button className="button" onClick={() => toggleFollow(author.id,author.is_following)}>{author.is_following ? 'Takibi bırak' : 'Takip et'}</button></div></article>)}</div>
           {!discoverAuthors.length && <div className="chapter-empty"><span>✦</span><h2>Henüz eşleşen yazar yok.</h2><p>Başka bir isimle ara veya topluluğa yeni yazarlar davet et.</p></div>}
         </section> : view === 'reader' ? <section className="reader-page">
-          <div className="reader-topline"><button className="text-button" onClick={() => setView('workspace')}>← Çalışma alanı</button><span className="eyebrow">ORTAK ROMAN · OKUMA MODU</span><button className="text-button" onClick={() => setView('home')}>Kitaplığıma dön</button></div>
-          <div className="reader-book"><div className="reader-running-head">{book?.title || 'Ortak Roman'} <span>{activeStory?.title || ''}</span></div><div className="reader-page-content"><span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')}</span><h1>{chapters.filter(c=>c.status==='published')[readingIndex]?.title || 'Henüz yayınlanmış bölüm yok'}</h1><div className="reader-prose">{(chapters.filter(c=>c.status==='published')[readingIndex]?.content || '').split(/\n\s*\n/).filter(Boolean).map((p,i)=><p key={i}>{p}</p>)}</div></div><div className="reader-controls"><button className="button light" disabled={readingIndex===0} onClick={()=>setReadingIndex(i=>Math.max(0,i-1))}>← Önceki</button><span>{Math.min(readingIndex+1,chapters.filter(c=>c.status==='published').length)} / {chapters.filter(c=>c.status==='published').length}</span><button className="button" disabled={readingIndex>=chapters.filter(c=>c.status==='published').length-1} onClick={()=>setReadingIndex(i=>i+1)}>Sonraki →</button></div></div>
+          <div className="reader-topline"><button className="text-button" onClick={() => setView('workspace')}>← Çalışma alanı</button><span className="eyebrow">ORTAK ROMAN · KİTAP OKUYUCU</span><button className="text-button" onClick={() => setView('home')}>Kitaplığıma dön</button></div>
+          <div className="reader-toolbar">
+            <label>BÖLÜM <select value={readerChapter?.id || ''} onChange={e=>{const index=readerChapters.findIndex(item=>item.id===e.target.value);setReadingIndex(Math.max(0,index));setReaderPageIndex(0);}}>{readerChapters.map((chapter,index)=><option key={chapter.id} value={chapter.id}>{String(index+1).padStart(2,'0')} · {chapter.title}</option>)}</select></label>
+            <label>OKUMA DÜZENİ <select value={readerLayout} onChange={e=>{setReaderLayout(e.target.value);setReaderPageIndex(0);setReaderTurn(null);}}><option value="spread">Açık kitap · iki sayfa</option><option value="single">Tek sayfa</option><option value="scroll">Kesintisiz kaydırma</option></select></label>
+          </div>
+          <div className={'reader-book reader-layout-' + readerLayout}>
+            <div className="reader-running-head"><span>{book?.title || 'Ortak Roman'}</span><span>{activeStory?.title || ''}</span></div>
+            {!readerChapter ? <div className="reader-empty"><span>✦</span><h2>Bu kitapta henüz yayınlanmış bölüm yok.</h2><p>Bir bölüm yayınlandığında burada okunabilir.</p></div> : readerLayout === 'scroll' ? <article className="reader-scroll-sheet">
+              <span className="eyebrow">BÖLÜM {String(readingIndex+1).padStart(2,'0')}</span><h1>{readerChapter.title}</h1>
+              <div className="reader-prose">{readerChapter.content.split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
+            </article> : <div className={'reader-spread' + (readerTurn ? ' turning-' + readerTurn : '')}>
+              <article className="reader-page-sheet page-left">
+                <span className="reader-page-kicker">{readerPageIndex === 0 ? readerChapter.title : 'ORTAK ROMAN'}</span>
+                <div className="reader-page-prose">{(readerPages[readerPageIndex] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
+                <span className="reader-page-number">{readerPageIndex+1}</span>
+              </article>
+              <article className="reader-page-sheet page-right">
+                <span className="reader-page-kicker">{readerChapter.title}</span>
+                <div className="reader-page-prose">{(readerPages[readerPageIndex+1] || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
+                <span className="reader-page-number">{Math.min(readerPageIndex+2,readerPages.length)}</span>
+              </article>
+              {readerTurn && <div className={'page-flip-overlay ' + readerTurn}><div className="page-flip-front"><span>{readerChapter.title}</span><p>{(readerPages[readerTurn==='forward'?readerPageIndex+1:readerPageIndex] || '').slice(0,450)}</p></div><div className="page-flip-back"></div></div>}
+            </div>}
+            <div className="reader-controls">
+              <button className="button light" disabled={readingIndex===0 && readerPageIndex===0} onClick={()=>{if(readerLayout!=='scroll' && readerPageIndex>0)turnBookPage(-1);else if(readingIndex>0){setReadingIndex(i=>i-1);setReaderPageIndex(0);}}}>← Önceki</button>
+              <span>{readerLayout==='scroll' ? 'Bölüm '+(readingIndex+1)+' / '+readerChapters.length : 'Sayfa '+(Math.min(readerPageIndex+1,readerPages.length)||0)+'–'+(Math.min(readerPageIndex+(readerLayout==='spread'?2:1),readerPages.length)||0)+' / '+readerPages.length}</span>
+              <button className="button" disabled={readingIndex>=readerChapters.length-1 && (readerLayout==='scroll' || readerPageIndex>=readerMaxPageIndex)} onClick={()=>{if(readerLayout!=='scroll' && readerPageIndex<readerMaxPageIndex)turnBookPage(1);else if(readingIndex<readerChapters.length-1){setReadingIndex(i=>i+1);setReaderPageIndex(0);}}}>Sonraki →</button>
+            </div>
+          </div>
         </section> : view === 'home' ? <section className="home-page">
           <div className="home-welcome"><div><span className="eyebrow">KİTAPLIĞIN · YAZAR TOPLULUĞU</span><h1>Her kitabın<br/><em>bir başlangıcı</em> vardır.</h1><p>Bir hikâyeyi tek başına başlatabilir, başka yazarlarla birlikte büyütebilirsin.</p><div className="home-actions"><button className="button" onClick={()=>setView('workspace')}>Yazmaya devam et <span>→</span></button><button className="button light" onClick={()=>setView('reader')}>Kitabı oku</button></div></div><div className="home-book-object"><div className="home-book-spine"></div><div className="home-book-cover"><small>ORTAK ROMAN</small><span>✦</span><strong>{book?.title || 'Bir hikâye, birçok ses'}</strong><i>Birlikte yazılan hikâyeler</i></div></div></div>
           <div className="home-section-head"><div><span className="eyebrow">SENİN KÜTÜPHANEN</span><h2>Hikâyelerine dön</h2></div><button className="text-button" onClick={()=>setView('workspace')}>Tüm hikâyeler →</button></div>
@@ -605,7 +710,7 @@ export default function App() {
             {activeStory ? <>
               <div className="story-heading">
                 <div><span className="eyebrow">SEÇİLİ HİKÂYE</span><h2>{activeStory.title}</h2><p>{activeStory.description || 'Bu hikâyenin dünyası henüz tanımlanmadı.'}</p></div>
-                <div className="story-heading-actions"><span className="story-word-meter">{chapters.reduce((n,c)=>n+words(c.content||''),0).toLocaleString('tr-TR')} / {(activeStory.target_words||10000).toLocaleString('tr-TR')} kelime</span><button className="button light" onClick={()=>{setReadingIndex(0);setView('reader');}}>Kitabı oku</button><span className={'status-pill ' + activeStory.status}>{activeStory.status === 'published' ? 'Yayında' : activeStory.status === 'archived' ? 'Arşiv' : 'Taslak'}</span><button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(activeStory.id)}>Davet bağlantısı</button>{isStoryOwner && <button className="button light danger-button" disabled={storyBusy} onClick={deleteStory}>Hikâyeyi sil</button>}</div>
+                <div className="story-heading-actions"><span className="story-word-meter">{chapters.reduce((n,c)=>n+words(c.content||''),0).toLocaleString('tr-TR')} / {(activeStory.target_words||10000).toLocaleString('tr-TR')} kelime</span><button className="button light" onClick={()=>{setReadingIndex(0);setReaderPageIndex(0);setView('reader');}}>Kitabı oku</button><span className={'status-pill ' + activeStory.status}>{activeStory.status === 'published' ? 'Yayında' : activeStory.status === 'archived' ? 'Arşiv' : 'Taslak'}</span><button className="button light" disabled={storyBusy} onClick={() => makeStoryInvite(activeStory.id)}>Davet bağlantısı</button>{isStoryOwner && <button className="button light danger-button" disabled={storyBusy} onClick={deleteStory}>Hikâyeyi sil</button>}</div>
               </div>
 
               {isStoryOwner && <div className="story-target-control"><label>Hikâye kelime hedefi <input type="number" min="100" max="1000000" step="100" value={activeStory.target_words || 10000} onChange={e=>{const target_words=Number(e.target.value);setStories(items=>items.map(s=>s.id===activeStory.id?{...s,target_words}:s));}} onBlur={async e=>{const {error}=await supabase.from('stories').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeStory.id);if(error)setNotice('Hedef güncellenemedi: '+error.message);else setNotice('Hikâye kelime hedefi güncellendi.');}}/></label><span>{storyWordCount.toLocaleString('tr-TR')} / {(activeStory.target_words||10000).toLocaleString('tr-TR')} kelime · Hikâyedeki tüm bölümlerin toplamı</span></div>}
@@ -624,23 +729,48 @@ export default function App() {
 
                 <div className={'chapter-editor-wrap' + (focusMode ? ' focus-mode focus-width-' + writingWidth : '')}>
                   {activeChapter ? <form className="chapter-editor" onSubmit={saveChapter}>
-                    <div className="editor-toolbar"><span className="eyebrow">{focusMode ? 'ODAK MODU · YAZI ALANI' : 'BÖLÜM DÜZENLEYİCİ'}</span><div><span className="save-state">{editorDirty ? 'Kaydedilmemiş değişiklik' : 'Son sürüm kayıtlı'}</span><button type="button" className="text-button" onClick={() => setFocusMode(value => !value)}>{focusMode ? 'Odak modundan çık' : '⛶ Odak modu'}</button>{isStoryOwner && !focusMode && <button type="button" className="text-button danger" onClick={deleteChapter}>Bölümü sil</button>}</div></div>
-                    {focusMode && <div className="focus-width-controls"><span>YAZMA ALANI</span><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Geniş · Word</button><span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime</span></div>}
-                    <input className="chapter-title-input" required maxLength={120} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı"/>
+                    <div className="editor-toolbar">
+                      {focusMode ? <div className="writer-studio-brand"><button type="button" className="writer-back-button" onClick={exitWritingStudio} aria-label="Çalışma alanına dön">←</button><div><span className="writer-studio-book">{activeStory?.title || 'Ortak Roman'}</span><strong>{editorTitle || 'Yeni bölüm'}</strong></div></div> : <span className="eyebrow">BÖLÜM DÜZENLEYİCİ</span>}
+                      <div className="writer-toolbar-actions">
+                        <span className="save-state">{editorDirty ? '● Kaydedilmedi' : '✓ Kaydedildi'}</span>
+                        {focusMode ? <button type="button" className="writer-exit-button" onClick={exitWritingStudio}>Çalışma alanına dön</button> : <button type="button" className="text-button" onClick={() => setFocusMode(true)}>⛶ Odak modunda yaz</button>}
+                        {isStoryOwner && !focusMode && <button type="button" className="text-button danger" onClick={deleteChapter}>Bölümü sil</button>}
+                      </div>
+                    </div>
+                    {focusMode && <div className="focus-width-controls">
+                      <div className="writer-format-group">
+                        <label>YAZI <select value={writingFont} onChange={e=>setWritingFont(e.target.value)}><option value="serif">Kitap serif</option><option value="sans">Modern</option><option value="typewriter">Daktilo</option></select></label>
+                        <label>PUNTO <select value={writingSize} onChange={e=>setWritingSize(e.target.value)}><option value="17">17</option><option value="18">18</option><option value="20">20</option><option value="22">22</option><option value="24">24</option></select></label>
+                        <label>SATIR <select value={writingLineHeight} onChange={e=>setWritingLineHeight(e.target.value)}><option value="1.6">Sıkı</option><option value="1.8">Normal</option><option value="1.95">Rahat</option><option value="2.1">Geniş</option></select></label>
+                      </div>
+                      <div className="writer-layout-group"><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Word sayfası</button></div>
+                      <span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime · {editorBlocks.length} paragraf</span>
+                    </div>
+                    <input className="chapter-title-input" required maxLength={120} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı" placeholder="Bölüm başlığı"/>
                     <div className="editor-meta"><span>{words(editorContent).toLocaleString('tr-TR')} / {(activeChapter.target_words||1000).toLocaleString('tr-TR')} kelime</span><label>Durum <select value={editorStatus} onChange={e => {setEditorStatus(e.target.value);setEditorDirty(true);}}><option value="draft">Taslak</option><option value="published">Yayında</option></select></label><label>Bölüm hedefi <input className="inline-word-target" type="number" min="100" max="100000" step="100" value={activeChapter.target_words || 1000} onChange={async e=>{const target_words=Number(e.target.value);setChapters(items=>items.map(c=>c.id===activeChapter.id?{...c,target_words}:c));}} onBlur={async e=>{const {error}=await supabase.from('chapters').update({target_words:Number(e.target.value),updated_at:new Date().toISOString()}).eq('id',activeChapter.id);if(error)setNotice('Bölüm hedefi güncellenemedi: '+error.message);else setNotice('Bölüm kelime hedefi güncellendi.');}}/></label></div>
                     {chapterOverLimit && <div className="word-limit-warning">Bölüm kelime sınırını aştın. Kaydedebilmek için {Math.max(0,words(editorContent)-chapterWordLimit)} kelime azalt veya bölüm hedefini yükselt.</div>}
                     {writingLock && <div className={'writing-presence ' + (writingLock.acquired ? 'is-self' : 'is-other')}><span className="writing-pencil">✎</span>{writingLock.acquired ? 'Şu anda bu bölümü sen yazıyorsun. Sıra sende.' : (writingLock.display_name || 'Bir yazar') + ' şu anda yazıyor · Bu bölüm geçici olarak kilitli.'}</div>}
-                    <div className="chapter-blocks-editor" aria-label="Paragraf yazma alanı">
+                    <div className={'chapter-blocks-editor' + (focusMode ? ' document-page-canvas' : '')} aria-label="Paragraf yazma alanı">
                       {editorBlocks.map((block, index) => <div className="chapter-block" key={block.id || 'new-' + index}>
-                        <textarea className="chapter-content-input chapter-block-input" disabled={!writingLock?.acquired} value={block.content} onChange={e => {
-                          const next = editorBlocks.map((item, i) => i === index ? {...item,content:e.target.value} : item);
-                          setEditorBlocks(next); setEditorContent(next.map(item => item.content).join('\n\n')); setEditorDirty(true);
-                        }} placeholder="Paragrafını buraya yaz…" aria-label={'Paragraf ' + (index + 1)}/>
+                        <textarea
+                          className="chapter-content-input chapter-block-input"
+                          disabled={!writingLock?.acquired}
+                          rows={Math.max(3, block.content.split('\n').reduce((total,line)=>total+Math.max(1,Math.ceil(line.length/72)),0))}
+                          style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
+                          value={block.content}
+                          onChange={e => {
+                            const next = editorBlocks.map((item, i) => i === index ? {...item,content:e.target.value} : item);
+                            setEditorBlocks(next); setEditorContent(next.map(item => item.content).join('\n\n')); setEditorDirty(true);
+                          }}
+                          placeholder={index === 0 ? 'Hikâyenin ilk cümlesini yaz…' : 'Devam et…'}
+                          aria-label={'Paragraf ' + (index + 1)}
+                        />
                         <div className="chapter-block-meta"><span>{block.author_id ? (block.author_id === userId ? 'İlk yazar: Sen' : 'İlk yazar: ' + block.author_name) : 'Eski metin · İlk yazarı bilinmiyor'}{block.updated_by && block.updated_by !== block.author_id ? ' · Son düzenleyen: ' + (block.updated_by === userId ? 'Sen' : block.editor_name) : ''} · {words(block.content)} kelime</span>
                           <button type="button" className="text-button danger" disabled={!writingLock?.acquired} onClick={() => {const next=editorBlocks.filter((_,i)=>i!==index);setEditorBlocks(next);setEditorContent(next.map(item => item.content).join('\n\n'));setEditorDirty(true);}}>Paragrafı kaldır</button>
                         </div>
                       </div>)}
-                      <button type="button" className="add-paragraph-button" disabled={!writingLock?.acquired} onClick={() => {setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yeni paragraf ekle</button>
+                      <button type="button" className="add-paragraph-button" disabled={!writingLock?.acquired} onClick={() => {setEditorBlocks(items=>[...items,{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>＋ Yazmaya devam et</button>
+                      {!editorBlocks.length && <button type="button" className="document-first-line" disabled={!writingLock?.acquired} onClick={()=>{setEditorBlocks([{id:null,content:'',author_id:userId}]);setEditorDirty(true);}}>Buraya tıklayıp yazmaya başla…</button>}
                     </div>
                     <div className="editor-footer"><button type="button" className="button light" onClick={loadRevisions}>Sürüm geçmişi</button><button className="button" disabled={busy || !writingLock?.acquired || chapterOverLimit || !editorTitle.trim() || !editorDirty}>{busy ? 'Kaydediliyor…' : 'Değişiklikleri kaydet'}</button></div>
                     {showRevisions && <div className="revision-list"><div className="revision-heading"><strong>Önceki sürümler</strong><button type="button" className="text-button" onClick={() => setShowRevisions(false)}>Kapat</button></div>

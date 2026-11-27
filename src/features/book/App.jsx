@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase/client.js';
 import { words } from '../../lib/text.js';
 import SetupScreen from '../../components/setup/SetupScreen.jsx';
 import '../../styles/global.css';
+import '../../styles/editorial-design.css';
 import '../../styles/reader-pagination.css';
 
 function renderHighlightedText(content, blockId, highlights) {

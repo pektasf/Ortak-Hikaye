@@ -5,7 +5,7 @@ import SetupScreen from '../../components/setup/SetupScreen.jsx';
 import '../../styles/global.css';
 import '../../styles/editorial-design.css';
 import '../../styles/reader-pagination.css';
-import { findReaderAuthorBlock, getReaderParagraphCredits } from './reader-attribution.js';
+import { getReaderParagraphCredits } from './reader-attribution.js';
 
 function renderHighlightedText(content, blockId, highlights) {
   const text = String(content || '');

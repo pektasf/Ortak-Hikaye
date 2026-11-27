@@ -12,12 +12,6 @@
 .focus-mode .writer-rich-canvas>p{margin:0 0 .82em;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
 .focus-mode .writer-toolbar-actions{min-width:0;flex-wrap:wrap}.focus-mode .save-state{white-space:nowrap}
 @media(max-width:760px){.focus-mode .chapter-editor{padding-inline:12px!important}.focus-mode .chapter-blocks-editor{width:100%!important;max-width:100%!important;padding-inline:clamp(18px,5vw,30px)!important}.focus-mode .writer-toolbar-actions{gap:4px}.focus-mode .writer-toolbar-actions .writer-exit-button{padding:6px 8px}}
-/* Visible paragraph-level authorship in the reader */
-.reader-attributed-paragraph{margin:0 0 1.15em}
-.reader-attributed-paragraph>p{margin:0 0 .28em!important}
-.reader-paragraph-author{display:block;text-align:right;font-size:.68rem;line-height:1.35;letter-spacing:.035em;color:var(--muted,#777);font-style:italic;padding:0 .15em .18em;opacity:.88}
-.reader-scroll-sheet .reader-paragraph-author{margin-top:-.2em;margin-bottom:.5em}
-
 /* Paragraph authorship is visible in the reading flow and included in page measurement. */
 .reader-paragraph-group{display:flow-root;margin:0 0 1.15em;min-width:0}
 .reader-paragraph-group>.reader-attributed-text{margin:0!important}

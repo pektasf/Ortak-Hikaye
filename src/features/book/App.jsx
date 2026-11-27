@@ -315,6 +315,7 @@ export default function App() {
     if (view !== 'reader' || !readerChapter?.id) return;
     let alive = true;
     setReaderParagraphBlocks([]);
+    setSentenceHighlights([]);
     supabase.from('chapter_blocks')
       .select('id,content,author_id,updated_by,position')
       .eq('chapter_id', readerChapter.id)

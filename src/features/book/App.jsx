@@ -22,10 +22,10 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const invite = params.get('invite');
-    if (invite) {
-      window.localStorage.setItem('ortak_roman_invite', invite);
-      window.history.replaceState({}, '', window.location.pathname);
-    }
+    const setup = params.get('setup');
+    if (invite) window.localStorage.setItem('ortak_roman_invite', invite);
+    if (setup === '1') window.localStorage.setItem('ortak_roman_bootstrap', '1');
+    if (invite || setup) window.history.replaceState({}, '', window.location.pathname);
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, value) => setSession(value));
@@ -48,6 +48,7 @@ export default function App() {
         window.localStorage.removeItem('ortak_roman_invite');
         if (error && active) setNotice('Davet bağlantısı doğrulanamadı: ' + error.message);
       }
+      window.localStorage.removeItem('ortak_roman_bootstrap');
       const { data, error } = await supabase.from('profiles')
         .select('access_granted, role, display_name').eq('id', session.user.id).maybeSingle();
       if (!active) return;
@@ -103,12 +104,14 @@ export default function App() {
   async function signIn(event) {
     event.preventDefault();
     const invite = window.localStorage.getItem('ortak_roman_invite');
-    if (!invite) {
-      setNotice('Giriş yapabilmek için önce davet bağlantısını açmalısın.');
+    const bootstrap = window.localStorage.getItem('ortak_roman_bootstrap') === '1';
+    if (!invite && !bootstrap) {
+      setNotice('Giriş yapabilmek için önce davet bağlantısını açmalısın. İlk sahip hesabı kurulumu için site adresinin sonuna ?setup=1 ekle.');
       return;
     }
     setBusy(true);
-    const redirect = window.location.origin + window.location.pathname + '?invite=' + encodeURIComponent(invite);
+    const redirect = window.location.origin + window.location.pathname +
+      (invite ? '?invite=' + encodeURIComponent(invite) : '?setup=1');
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirect, shouldCreateUser: true }

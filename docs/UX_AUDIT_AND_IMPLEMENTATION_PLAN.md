@@ -73,7 +73,7 @@ Hikâye ayarları kaydetme akışı `theme` alanını güncelliyor; ancak çalı
 
 ### Aşama 2 — Kitap okuyucu
 - [ ] Kapak ve künye sayfaları.
-- [ ] İçindekiler ve bölüm navigasyonu.
+- [x] Birden fazla bölümü olan kitaplarda tıklanabilir içindekiler ve bölüm seçimi eklendi.
 - [ ] Önceki/sonraki bölüm ve kaldığın yerden devam.
 - [ ] Sayfalı, açık kitap ve kaydırmalı düzenlerin tutarlı çalışması.
 - [ ] Yazar atıfları, cümle vurguları ve okuma araçları.

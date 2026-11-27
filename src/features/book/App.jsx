@@ -4,6 +4,28 @@ import { words } from '../../lib/text.js';
 import SetupScreen from '../../components/setup/SetupScreen.jsx';
 import '../../styles/global.css';
 
+function renderHighlightedText(content, blockId, highlights) {
+  const text = String(content || '');
+  const matches = (highlights || [])
+    .filter(item => item.block_id === blockId
+      && item.start_offset >= 0
+      && item.end_offset <= text.length
+      && item.end_offset > item.start_offset
+      && text.slice(item.start_offset, item.end_offset) === item.sentence_text)
+    .sort((a, b) => a.start_offset - b.start_offset || a.end_offset - b.end_offset);
+  if (!matches.length) return text;
+  const nodes = [];
+  let cursor = 0;
+  for (const item of matches) {
+    if (item.start_offset < cursor) continue;
+    if (item.start_offset > cursor) nodes.push(text.slice(cursor, item.start_offset));
+    nodes.push(<span className="sentence-highlight" key={item.id} title="Cümle vurgusu">{text.slice(item.start_offset, item.end_offset)}</span>);
+    cursor = item.end_offset;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes;
+}
+
 function paginateBookText(value, wordsPerPage = 175) {
   const paragraphs = String(value || '').split(/\n\s*\n/).map(item => item.trim()).filter(Boolean);
   const pages = [];
@@ -51,6 +73,8 @@ export default function App() {
   const [editorTitle, setEditorTitle] = useState('');
   const [editorContent, setEditorContent] = useState('');
   const [editorBlocks, setEditorBlocks] = useState([]);
+  const [sentenceHighlights, setSentenceHighlights] = useState([]);
+  const [selectedSentence, setSelectedSentence] = useState(null);
   const [editorStatus, setEditorStatus] = useState('draft');
   const [editorDirty, setEditorDirty] = useState(false);
   const [newStoryTitle, setNewStoryTitle] = useState('');
@@ -93,6 +117,14 @@ export default function App() {
     const blocks = (data || []).map(block => ({...block,author_name:names[block.author_id] || (block.author_id ? 'Yazar' : 'Eski metin'),editor_name:names[block.updated_by] || 'Yazar'}));
     setEditorBlocks(blocks);
     setEditorContent(blocks.map(block => block.content).join('\n\n') || '');
+    const { data: highlights, error: highlightError } = await supabase
+      .from('chapter_sentence_highlights')
+      .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
+      .eq('chapter_id', chapterId)
+      .order('created_at', { ascending: true });
+    if (highlightError) setNotice('Cümle vurguları yüklenemedi: ' + highlightError.message);
+    else setSentenceHighlights(highlights || []);
+    setSelectedSentence(null);
     return blocks;
   }
 
@@ -333,6 +365,69 @@ export default function App() {
       setNotice('Hikâyen oluşturuldu. İlk bölümünü şimdi ekleyebilirsin.');
     }
     setStoryBusy(false);
+  }
+
+  function captureSentenceSelection() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) {
+      setSelectedSentence(null);
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const canvas = document.querySelector('.writer-rich-canvas');
+    if (!canvas || !canvas.contains(range.commonAncestorContainer)) {
+      setSelectedSentence(null);
+      return;
+    }
+    const elementFor = node => node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    const startParagraph = elementFor(range.startContainer)?.closest('p[data-block-id]');
+    const endParagraph = elementFor(range.endContainer)?.closest('p[data-block-id]');
+    if (!startParagraph || startParagraph !== endParagraph) {
+      setSelectedSentence(null);
+      return;
+    }
+    const blockId = startParagraph.getAttribute('data-block-id');
+    if (!blockId) {
+      setSelectedSentence(null);
+      setNotice('Önce bölümü kaydet; ardından bu paragraftaki cümleyi vurgulayabilirsin.');
+      return;
+    }
+    const rawText = range.toString();
+    const sentence = rawText.trim();
+    if (!sentence || sentence.length > 2000) {
+      setSelectedSentence(null);
+      return;
+    }
+    const leading = rawText.length - rawText.trimStart().length;
+    const prefix = range.cloneRange();
+    prefix.selectNodeContents(startParagraph);
+    prefix.setEnd(range.startContainer, range.startOffset);
+    const startOffset = prefix.toString().length + leading;
+    setSelectedSentence({
+      chapter_id: activeChapterId,
+      block_id: blockId,
+      sentence_text: sentence,
+      start_offset: startOffset,
+      end_offset: startOffset + sentence.length
+    });
+  }
+
+  async function addSentenceHighlight() {
+    if (!selectedSentence || !writingLock?.acquired || selectedSentence.chapter_id !== activeChapterId) return;
+    const payload = { ...selectedSentence, author_id: userId };
+    const { data, error } = await supabase
+      .from('chapter_sentence_highlights')
+      .insert(payload)
+      .select('id,chapter_id,block_id,author_id,sentence_text,start_offset,end_offset,created_at')
+      .single();
+    if (error) {
+      setNotice(error.code === '23505' ? 'Bu cümleyi zaten vurgulamışsın.' : 'Cümle vurgulanamadı: ' + error.message);
+      return;
+    }
+    setSentenceHighlights(items => [...items, data]);
+    setSelectedSentence(null);
+    window.getSelection()?.removeAllRanges();
+    setNotice('Cümlenin altı çizildi ve yazar profiline eklendi.');
   }
 
   async function openProfile(targetId) {
@@ -656,9 +751,9 @@ export default function App() {
             <article><strong>{profile?.stats?.writers_invited ?? 0}</strong><span>Davetle katılan yazar</span></article>
             <article><strong>{profile?.stats?.invite_links_created ?? 0}</strong><span>Davet bağlantısı oluşturdu</span></article>
             <article><strong>{profile?.stats?.chapter_edits ?? 0}</strong><span>Bölüm düzenlemesi</span></article>
-            <article className="profile-stat-upcoming"><strong>Yakında</strong><span>Altı çizilen cümleler</span></article>
+            <article><strong>{profile?.stats?.sentences_highlighted ?? 0}</strong><span>Altını çizdiği cümle</span></article>
           </div>
-          <p className="profile-stat-note">Kelime sayısı, ilk yazarı olduğun paragrafların güncel metninden hesaplanır; paragrafı sonradan düzenleyen kişinin eklediği veya çıkardığı kelimeler ayrı hesaplanmaz. Eski metinlerin yazarı bilinmediği için katkı istatistiklerine dahil edilmez. Cümle vurguları henüz kullanıma açılmadı.</p>
+          <p className="profile-stat-note">Kelime sayısı, ilk yazarı olduğun paragrafların güncel metninden hesaplanır; paragrafı sonradan düzenleyen kişinin eklediği veya çıkardığı kelimeler ayrı hesaplanmaz. Eski metinlerin yazarı bilinmediği için katkı istatistiklerine dahil edilmez. Altını çizdiğin cümleler ortak metinde görünür ve yazar profiline sayılır.</p>
           {publicProfileId === userId && <form className="profile-edit-card" onSubmit={saveProfile}>
             <div><span className="eyebrow">KİŞİSEL ALAN</span><h2>Profilini düzenle</h2><p>Diğer hikâye üyeleri adını ve kısa tanıtımını görebilir.</p></div>
             <label>Görünen ad<input required minLength={2} maxLength={40} value={profileForm.display_name} onChange={e => setProfileForm(v => ({...v,display_name:e.target.value}))}/></label>
@@ -773,6 +868,10 @@ export default function App() {
                         <label>SATIR <select value={writingLineHeight} onChange={e=>setWritingLineHeight(e.target.value)}><option value="1.6">Sıkı</option><option value="1.8">Normal</option><option value="1.95">Rahat</option><option value="2.1">Geniş</option></select></label>
                       </div>
                       <div className="writer-layout-group"><button type="button" className={writingWidth === 'notebook' ? 'active' : ''} onClick={() => setWritingWidth('notebook')}>Defter</button><button type="button" className={writingWidth === 'wide' ? 'active' : ''} onClick={() => setWritingWidth('wide')}>Word</button><button type="button" className={writingWidth === 'book' ? 'active' : ''} onClick={() => setWritingWidth('book')}>Kitap</button></div>
+                      <div className="sentence-highlight-actions">
+                        <button type="button" className="sentence-highlight-button" disabled={!selectedSentence || !writingLock?.acquired} onMouseDown={e=>e.preventDefault()} onClick={addSentenceHighlight}>↗ Cümlenin altını çiz</button>
+                        <span>{sentenceHighlights.length} cümle vurgusu</span>
+                      </div>
                       <span className="focus-word-count">{words(editorContent).toLocaleString('tr-TR')} kelime</span>
                     </div>}
                     <input className="chapter-title-input" required maxLength={120} value={editorTitle} onChange={e => {setEditorTitle(e.target.value);setEditorDirty(true);}} aria-label="Bölüm başlığı" placeholder="Bölüm başlığı"/>
@@ -790,8 +889,10 @@ export default function App() {
                         data-placeholder="Hikâyenin ilk cümlesini yaz…"
                         style={{fontFamily:writingFont==='sans'?'Arial, sans-serif':writingFont==='typewriter'?'Courier New, monospace':"'Literata', 'EB Garamond', Georgia, serif",fontSize:writingSize+'px',lineHeight:writingLineHeight}}
                         onInput={e=>{setEditorContent(e.currentTarget.innerText.replace(/\r/g,'').replace(/\u00a0/g,' '));setEditorDirty(true);}}
+                        onMouseUp={captureSentenceSelection}
+                        onKeyUp={captureSentenceSelection}
                       >
-                        {editorBlocks.map((block,index)=><p key={block.id || 'legacy-'+index} data-block-id={block.id || ''}>{block.content || <br/>}</p>)}
+                        {editorBlocks.map((block,index)=><p key={block.id || 'legacy-'+index} data-block-id={block.id || ''}>{block.content ? renderHighlightedText(block.content, block.id, sentenceHighlights) : <br/>}</p>)}
                       </div> : <>
                         {editorBlocks.map((block,index)=><div className="chapter-block" key={block.id || 'new-'+index}>
                           <textarea className="chapter-content-input chapter-block-input" disabled={!writingLock?.acquired} rows={Math.max(3,block.content.split('\n').length)} value={block.content} onChange={e=>{
